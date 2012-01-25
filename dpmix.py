@@ -196,7 +196,6 @@ class DPNormalMixture(object):
             Xj = self.data[mask]
             nj = len(Xj)
 
-            # TODO: sample from prior if nj == 0
             sumxj = Xj.sum(0)
 
             gam = self.gamma[j]
@@ -218,7 +217,7 @@ class DPNormalMixture(object):
 
             # P(Sigma) ~ IW(nu + 2, nu * Phi)
             # P(Sigma | theta, Y) ~
-            post_nu = nj + self.ncomp + self._nu0 + 3
+            post_nu = nj + self.ndim + self._nu0 + 2
 
             # pymc rinverse_wishart takes
             new_Sigma = pm.rinverse_wishart_prec(post_nu, post_Phi)
