@@ -279,8 +279,8 @@ def _get_mask(labels, ncomp):
 
 gen_mean = {
     0 : [0, 5],
-    1 : [-10, 0],
-    2 : [-10, 10]
+    1 : [-5, 0],
+    2 : [5,0]
 }
 
 gen_sd = {
@@ -295,7 +295,7 @@ gen_corr = {
     2 : 0
 }
 
-group_weights = [0.6, 0.3, 0.1]
+group_weights = [0.4, 0.3, 0.3]
 
 def generate_data(n=1e5, k=2, ncomps=3, seed=1):
     npr.seed(seed)
@@ -343,7 +343,7 @@ if __name__ == '__main__':
     model.sample(100,nburn=100)
     #print model.stick_weights
     mu = model.mu
-    print mu.shape
+    print model.weights[-1]
     pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
     pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
     pylab.show()
