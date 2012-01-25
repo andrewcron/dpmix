@@ -15,8 +15,11 @@ import numpy.random as npr
 
 import pymc as pm
 import gpustats
+import gpustats.sampler
 
-import statlib.ffbs as ffbs
+#import statlib.ffbs as ffbs
+
+import pylab
 
 class DPNormalMixture(object):
     """
@@ -49,7 +52,7 @@ class DPNormalMixture(object):
         # TODO hyperparameters
         # prior mean for component means
         self.mu_prior_mean = np.zeros(self.ndim)
-        self.gamma = np.ones(ncomp)
+        self.gamma = 10*np.ones(ncomp)
 
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, alpha_a0, alpha_b0)
@@ -97,10 +100,11 @@ class DPNormalMixture(object):
         mu = self._mu0
         Sigma = self._Sigma0
 
-        ax = plt.gca()
+        #ax = plt.gca()
 
         for i in range(-nburn, niter):
             labels = self._update_labels(mu, Sigma, weights)
+	    print labels[[0,400,600,700,900,950]]
 
             component_mask = _get_mask(labels, self.ncomp)
             counts = component_mask.sum(1)
@@ -111,8 +115,9 @@ class DPNormalMixture(object):
             mu, Sigma = self._update_mu_Sigma(Sigma, component_mask)
 
             if i % 50 == 0:
-                print i, counts
-                print np.c_[mu, weights]
+                #print i, counts
+                #print np.c_[mu, weights]
+		pass
 
             '''
                 for j in xrange(self.ncomp):
@@ -149,9 +154,17 @@ class DPNormalMixture(object):
 
     def _update_labels(self, mu, Sigma, weights):
         # GPU business happens?
-        densities = gpustats.mvnpdf_multi(self.data, mu, Sigma, weights=weights, get=False)
-        return gpustats.sample_discrete(densities, logged=True)
+        densities = gpustats.mvnpdf_multi(self.data, mu, Sigma, weights=weights, get=True, logged=True)
+	
+        #return gpustats.sampler.sample_discrete(densities, logged=True)
+        rslt =  gpustats.sampler.sample_discrete(densities, logged=True)
         
+	f = np.exp((densities.T - densities.max(1)).T)
+	norm = f.sum(1)
+	#print f, norm
+	f = (f.T / norm).T
+        print f[[0,400,600,700,900,950],:]
+        return rslt
         #densities = (densities.T / densities.sum(1)).T
 
         # convert this to run in the GPU
@@ -324,6 +337,14 @@ if __name__ == '__main__':
     ncomps = 3 # n mixture components
     npr.seed(1)
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
+    data = data - data.mean(0)
+    data = data/data.std(0)
 
-    model = DPNormalMixture(data, ncomp=256)
-    model.sample(2000)
+    model = DPNormalMixture(data, ncomp=3)
+    model.sample(100,nburn=100)
+    #print model.stick_weights
+    mu = model.mu
+    print mu.shape
+    pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
+    pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
+    pylab.show()
