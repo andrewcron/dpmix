@@ -9,13 +9,20 @@ from __future__ import division
 import matplotlib.pyplot as plt
 
 import scipy.stats as stats
+import scipy.linalg as LA
 
 import numpy as np
 import numpy.random as npr
 
 import pymc as pm
-import gpustats
-import gpustats.sampler
+
+# check for gpustats compatability
+try:
+    import gpustats
+    import gpustats.sampler
+    _has_gpu = True
+except ImportError:
+    _has_gpu = False
 
 #import statlib.ffbs as ffbs
 
@@ -44,7 +51,15 @@ class DPNormalMixture(object):
 
     def __init__(self, data, ncomp=256, alpha0=1, nu0=None, Phi0=None,
                  mu0=None, Sigma0=None, weights0=None, alpha_a0=1,
-                 alpha_b0=1):
+                 alpha_b0=1, gpu=None):
+        if _has_gpu:
+            if gpu is not None:
+                self.gpu = gpu
+            else:
+                self.gpu = _has_gpu
+        else:
+            self.gpu = False
+
         self.data = np.asarray(data)
         self.nobs, self.ndim = self.data.shape
         self.ncomp = ncomp
@@ -64,13 +79,13 @@ class DPNormalMixture(object):
 
         if Phi0 is None:
             Phi0 = np.empty((self.ncomp, self.ndim, self.ndim))
-            Phi0[:] = np.eye(self.ndim) * (nu0 - 1)
+            Phi0[:] = np.eye(self.ndim) * nu0
 
         if Sigma0 is None:
             # draw from prior
             Sigma0 = np.empty((self.ncomp, self.ndim, self.ndim))
             for j in xrange(self.ncomp):
-                Sigma0[j] = pm.rinverse_wishart_prec(nu0 + 2 + self.ncomp, Phi0[j])
+                Sigma0[j] = pm.rinverse_wishart(nu0 + 1 + self.ndim, Phi0[j])
 
         # starting values, are these sensible?
         if mu0 is None:
@@ -80,7 +95,8 @@ class DPNormalMixture(object):
                                            self.gamma[j] * Sigma0[j])
 
         if weights0 is None:
-            _, weights0 = stick_break_proc(1, 1, size=self.ncomp - 1)
+            weights0 = (1/self.ncomp)*np.ones((self.ncomp, 1))
+            #_, weights0 = stick_break_proc(1, 1, size=self.ncomp - 1)
 
         self._alpha0 = alpha0
         self._alpha_a0 = alpha_a0
@@ -104,11 +120,12 @@ class DPNormalMixture(object):
 
         for i in range(-nburn, niter):
             labels = self._update_labels(mu, Sigma, weights)
-	    print labels[[0,400,600,700,900,950]]
+	    #print labels[[0,400,600,700,900,950]]
+            print mu
+            print alpha
 
             component_mask = _get_mask(labels, self.ncomp)
             counts = component_mask.sum(1)
-
             stick_weights, weights = self._update_stick_weights(counts, alpha)
 
             alpha = self._update_alpha(stick_weights)
@@ -153,22 +170,21 @@ class DPNormalMixture(object):
         self.stick_weights = np.zeros((nresults, self.ncomp - 1))
 
     def _update_labels(self, mu, Sigma, weights):
-        # GPU business happens?
-        densities = gpustats.mvnpdf_multi(self.data, mu, Sigma, weights=weights, get=True, logged=True)
-	
-        #return gpustats.sampler.sample_discrete(densities, logged=True)
-        rslt =  gpustats.sampler.sample_discrete(densities, logged=True)
-        
-	f = np.exp((densities.T - densities.max(1)).T)
-	norm = f.sum(1)
-	#print f, norm
-	f = (f.T / norm).T
-        print f[[0,400,600,700,900,950],:]
-        return rslt
-        #densities = (densities.T / densities.sum(1)).T
-
-        # convert this to run in the GPU
-        #return ffbs.f32_sample_discrete(densities)
+        if self.gpu:
+            # GPU business happens?
+            densities = gpustats.mvnpdf_multi(self.data, mu, Sigma, weights=weights, get=True, logged=True)
+            #return gpustats.sampler.sample_discrete(densities, logged=True)
+            rslt =  gpustats.sampler.sample_discrete(densities, logged=True)
+            
+            f = np.exp((densities.T - densities.max(1)).T)
+            norm = f.sum(1)
+            #print f, norm
+            f = (f.T / norm).T
+            print f[[0,400,600,700,900,950],:]
+            return rslt
+        else:
+            densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
+            return sample_discrete(densities).squeeze()
 
     def _update_stick_weights(self, counts, alpha):
         """
@@ -178,7 +194,6 @@ class DPNormalMixture(object):
 
         a = 1 + counts[:-1]
         b = alpha + reverse_cumsum[1:]
-
         stick_weights, mixture_weights = stick_break_proc(a, b)
         return stick_weights, mixture_weights
 
@@ -210,7 +225,7 @@ class DPNormalMixture(object):
 
             mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
             data_SS = np.dot(Xj_demeaned.T, Xj_demeaned)
-            post_Phi = data_SS + mu_SS + self._nu0 * self._Phi0[j]
+            post_Phi = data_SS + mu_SS + self._Phi0[j]
 
             # symmetrize
             post_Phi = (post_Phi + post_Phi.T) / 2
@@ -226,6 +241,36 @@ class DPNormalMixture(object):
             Sigma_output[j] = new_Sigma
 
         return mu_output, Sigma_output
+
+def mvn_weighted_logged(data, means, covs, weights):
+    n, p = data.shape
+    k = len(weights)
+    densities = np.zeros((n, k))
+    const = 0.5 * p * np.log(2*np.pi)
+
+    for i in range(k):
+        diff = np.dot(data - means[i,:], LA.inv(LA.cholesky(covs[i,:,:])))
+        densities[:,i] = np.log(weights[i]) - const - 0.5*(diff**2).sum(1)
+
+    return densities
+    
+
+def sample_discrete(densities, logged=True):
+    # this will sample the discrete densities
+    # if they are logged, they will be exponentiated IN PLACE
+    # there is probably a more efficient way to do this .. maybe cython
+    n, p = densities.shape
+    labels = np.zeros((n,1))
+    if logged:
+        densities = np.exp((densities.T - densities.max(1)).T)
+    norm = densities.sum(1)
+    densities = (densities.T / norm).T
+
+    for i in xrange(n):
+        labels[i] = pm.rcategorical(densities[i,:])
+
+    return labels
+    
 
 def stick_break_proc(beta_a, beta_b, size=None):
     """
@@ -258,7 +303,7 @@ def stick_break_proc(beta_a, beta_b, size=None):
 
     pi[0] = V[0]
     prod = (1 - V[0])
-    for k in xrange(2, len(V)):
+    for k in xrange(1, len(V)):
         pi[k] = prod * V[k]
         prod *= 1 - V[k]
     pi[-1] = prod
@@ -302,7 +347,7 @@ def generate_data(n=1e5, k=2, ncomps=3, seed=1):
     data_concat = []
     labels_concat = []
 
-    for j in range(ncomps):
+    for j in xrange(ncomps):
         mean = gen_mean[j]
         sd = gen_sd[j]
         corr = gen_corr[j]
@@ -346,4 +391,5 @@ if __name__ == '__main__':
     print mu.shape
     pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
     pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
-    pylab.show()
+    pylab.draw()
+
