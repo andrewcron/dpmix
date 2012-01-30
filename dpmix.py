@@ -258,16 +258,28 @@ def mvn_weighted_logged(data, means, covs, weights):
 def sample_discrete(densities, logged=True):
     # this will sample the discrete densities
     # if they are logged, they will be exponentiated IN PLACE
-    # there is probably a more efficient way to do this .. maybe cython
+    
+    
     n, p = densities.shape
-    labels = np.zeros((n,1))
+    
+    #if we're logged exponentiate.
     if logged:
         densities = np.exp((densities.T - densities.max(1)).T)
     norm = densities.sum(1)
+    
     densities = (densities.T / norm).T
+    
+    # calculate a cumlative probability over all the densities
+    # draw a random [0,1] for each and measure across to find
+    # where it swaps from True to False
+    # uses True == 1 to quickly find the cross over point point
+    # since K - #of True == index of first True
+    
+    csx = np.cumsum(densities, axis=1)
+    r = np.random.random((n,1))
 
-    for i in xrange(n):
-        labels[i] = pm.rcategorical(densities[i,:])
+    y = r < csx
+    labels = len(y[0]) - np.sum(y, 1)
 
     return labels
     
@@ -385,11 +397,11 @@ if __name__ == '__main__':
     data = data/data.std(0)
 
     model = DPNormalMixture(data, ncomp=3)
-    model.sample(100,nburn=100)
+    model.sample(1000,nburn=100)
     #print model.stick_weights
     mu = model.mu
     print mu.shape
     pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
     pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
-    pylab.draw()
+    pylab.show()
 
