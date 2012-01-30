@@ -172,16 +172,18 @@ class DPNormalMixture(object):
     def _update_labels(self, mu, Sigma, weights):
         if self.gpu:
             # GPU business happens?
-            densities = gpustats.mvnpdf_multi(self.data, mu, Sigma, weights=weights, get=True, logged=True)
+	    print self.data.shape, weights.shape, mu.shape, Sigma.shape
+            densities = gpustats.mvnpdf_multi(self.data, mu, Sigma, weights=weights.flatten(), get=True, logged=True)
             #return gpustats.sampler.sample_discrete(densities, logged=True)
-            rslt =  gpustats.sampler.sample_discrete(densities, logged=True)
+            #rslt =  gpustats.sampler.sample_discrete(densities, logged=True)
             
-            f = np.exp((densities.T - densities.max(1)).T)
-            norm = f.sum(1)
+            #f = np.exp((densities.T - densities.max(1)).T)
+            #norm = f.sum(1)
             #print f, norm
-            f = (f.T / norm).T
-            print f[[0,400,600,700,900,950],:]
-            return rslt
+            #f = (f.T / norm).T
+            #print f[[0,400,600,700,900,950],:]
+            #return rslt
+            return sample_discrete(densities, logged=True).squeeze()
         else:
             densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
             return sample_discrete(densities).squeeze()
