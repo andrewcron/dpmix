@@ -174,7 +174,7 @@ class DPNormalMixture(object):
             # GPU business happens?
 	    print self.data.shape, weights.shape, mu.shape, Sigma.shape
             densities = gpustats.mvnpdf_multi(self.data, mu, Sigma, weights=weights.flatten(), get=True, logged=True)
-            #return gpustats.sampler.sample_discrete(densities, logged=True)
+            return gpustats.sampler.sample_discrete(densities, logged=True)
             #rslt =  gpustats.sampler.sample_discrete(densities, logged=True)
             
             #f = np.exp((densities.T - densities.max(1)).T)
@@ -183,7 +183,7 @@ class DPNormalMixture(object):
             #f = (f.T / norm).T
             #print f[[0,400,600,700,900,950],:]
             #return rslt
-            return sample_discrete(densities, logged=True).squeeze()
+            #return sample_discrete(densities, logged=True).squeeze()
         else:
             densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
             return sample_discrete(densities).squeeze()
