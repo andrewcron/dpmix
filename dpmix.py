@@ -15,6 +15,7 @@ import numpy as np
 import numpy.random as npr
 
 import pymc as pm
+import pdb
 
 # check for gpustats compatability
 try:
@@ -81,10 +82,10 @@ class DPNormalMixture(object):
         self.gamma = gamma0*np.ones(ncomp)
 
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
-                                 weights0, alpha_a0, alpha_b0)
+                                 weights0, e0, f0)
 
     def _set_initial_values(self, alpha0, nu0, Phi0, mu0, Sigma0, weights0,
-                            alpha_a0, alpha_b0):
+                            e0, f0):
         if nu0 is None:
             nu0 = 3
 
@@ -283,17 +284,21 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
     """
 
-    def __init__(self, data, ncomp=256, alpha0=1, nu0=None, Phi0=None,
-                 mu0=None, Sigma0=None, weights0=None, e0=1,
-                 f0=1, gpu=None):
+    def __init__(self, data, ncomp=256, gamma0=10, m0=None,
+                 nu0=None, Phi0=None, e0=1, f0=1,
+                 mu0=None, Sigma0=None, weights0=None, alpha0=1,
+                 gpu=None):
+
         ## for now, initialization is exactly the same .... 
-        super(BEM_DPNoarmalMixture, self).__init__(args)
+        super(BEM_DPNormalMixture, self).__init__(
+            data, ncomp, gamma0, m0, nu0, Phi0, e0, f0,
+            mu0, Sigma0, weights0, alpha0, gpu)
         self.alpha = self._alpha0
         self.weights = self._weights0.copy()
         self.stick_weights = self.weights.copy()
         self.mu = self._mu0.copy()
         self.Sigma = self._Sigma0.copy()
-        self.e_labels = np.tile(self.weights.copy(), (self.nobs, 1))
+        self.e_labels = np.tile(self.weights.flatten(), (self.nobs, 1))
         self.densities = None
 
     def optimize(self, maxiter=1000, perdiff=0.5):
@@ -306,6 +311,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
             print it
             print ll_2
             self.maximize_mu()
+            pdb.set_trace()
             self.maximize_Sigma()
             self.maximize_weights()
             self.expected_alpha()
@@ -335,15 +341,15 @@ class BEM_DPNormalMixture(DPNormalMixture):
         self.ct = densities.sum(0)
         self.xbar = np.dot(densities.T, self.data)
 
-
     def expected_alpha(self):
         sm = np.sum(np.log(1. - self.stick_weights[:-1]))
         self.alpha = (self.ncomp + self.e - 1.) / (self.f - sm)
 
     def maximize_mu(self):
-        self.mu = (np.tile(self.mu_prior_mean, (self.ncomp, 1)) + 
-                   np.tile(self.gamma, self(1, self.ndim))*self.xbar) \
-                   / np.tile(( 1. + self.gamma * self.ct ), (self.ncomp,1))
+        k, p = self.ncomp, self.ndim
+        self.mu = (np.tile(self.mu_prior_mean, (k, 1)) + 
+                   np.tile(self.gamma.reshape(k,1), (1,p))*self.xbar) / \
+                   np.tile(( 1. + self.gamma * self.ct).reshape(k,1), (1,p))
 
     def maximize_Sigma(self):
         df = self.ct + self._nu0 + 2*self.ndim + 3
@@ -526,8 +532,9 @@ if __name__ == '__main__':
     data = data - data.mean(0)
     data = data/data.std(0)
 
-    model = DPNormalMixture(data, ncomp=3)
-    model.sample(1000,nburn=100)
+    model = BEM_DPNormalMixture(data, ncomp=3, gpu=False)
+    model.optimize()
+    #model.sample(1000,nburn=100)
     #print model.stick_weights
     mu = model.mu
     print model.weights[-1]
