@@ -30,7 +30,7 @@ import pylab
 
 class DPNormalMixture(object):
     """
-    Truncated Dirichlet Process Mixture of Normals
+    MCMC sampling for Truncated Dirichlet Process Mixture of Normals
 
     Parameters
     ----------
@@ -44,14 +44,18 @@ class DPNormalMixture(object):
     \alpha ~ Ga(e, f)
     \Sigma_j ~ IW(nu0 + 2, nu0 * \Phi_j)
 
+    Citation
+    --------
+
     Returns
     -------
     **Attributes**
     """
 
-    def __init__(self, data, ncomp=256, alpha0=1, nu0=None, Phi0=None,
-                 mu0=None, Sigma0=None, weights0=None, alpha_a0=1,
-                 alpha_b0=1, gpu=None):
+    def __init__(self, data, ncomp=256, gamma0=10, m0=None,
+                 nu0=None, Phi0=None, e0=1, f0=1,
+                 mu0=None, Sigma0=None, weights0=None, alpha0=1,
+                 gpu=None):
         if _has_gpu:
             if gpu is not None:
                 self.gpu = gpu
@@ -66,8 +70,15 @@ class DPNormalMixture(object):
 
         # TODO hyperparameters
         # prior mean for component means
-        self.mu_prior_mean = np.zeros(self.ndim)
-        self.gamma = 10*np.ones(ncomp)
+        if m0 is not None:
+            if len(m0)==self.ndim:
+                self.mu_prior_mean = m0.copy()
+            elif len(m0)==1:
+                self.mu_prior_mean = m0*np.ones(self.ndim)
+        else:
+            self.mu_prior_mean = np.zeros(self.ndim)
+
+        self.gamma = gamma0*np.ones(ncomp)
 
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, alpha_a0, alpha_b0)
@@ -99,8 +110,8 @@ class DPNormalMixture(object):
             #_, weights0 = stick_break_proc(1, 1, size=self.ncomp - 1)
 
         self._alpha0 = alpha0
-        self._alpha_a0 = alpha_a0
-        self._alpha_b0 = alpha_b0
+        self.e = e0
+        self.f = f0
 
         self._weights0 = weights0
         self._mu0 = mu0
@@ -243,6 +254,123 @@ class DPNormalMixture(object):
             Sigma_output[j] = new_Sigma
 
         return mu_output, Sigma_output
+
+class BEM_DPNormalMixture(DPNormalMixture):
+    """
+    BEM algorithm for finding the posterior mode of the
+    Truncated Dirichlet Process Mixture of Models 
+
+    Parameters
+    ----------
+    data : ndarray (nobs x ndim)
+    ncomp : int
+        Number of mixture components
+
+    Notes
+    -----
+    y ~ \sum_{j=1}^J \pi_j {\cal N}(\mu_j, \Sigma_j)
+    \alpha ~ Ga(e, f)
+    \Sigma_j ~ IW(nu0 + 2, nu0 * \Phi_j)
+
+    Citation
+    --------
+    
+
+
+    Returns
+    -------
+    **Attributes**
+
+    """
+
+    def __init__(self, data, ncomp=256, alpha0=1, nu0=None, Phi0=None,
+                 mu0=None, Sigma0=None, weights0=None, e0=1,
+                 f0=1, gpu=None):
+        ## for now, initialization is exactly the same .... 
+        super(BEM_DPNoarmalMixture, self).__init__(args)
+        self.alpha = self._alpha0
+        self.weights = self._weights0.copy()
+        self.stick_weights = self.weights.copy()
+        self.mu = self._mu0.copy()
+        self.Sigma = self._Sigma0.copy()
+        self.e_labels = np.tile(self.weights.copy(), (self.nobs, 1))
+        self.densities = None
+
+    def optimize(self, maxiter=1000, perdiff=0.5):
+        self.expected_labels()
+        ll_2 = self.log_posterior()
+        ll_1 = 1
+        it = 0
+        while np.abs(ll_1 - ll_2)/ll_1 > 0.01*perdiff and it < maxiter:
+            it += 1
+            print it
+            print ll_2
+            self.maximize_mu()
+            self.maximize_Sigma()
+            self.maximize_weights()
+            self.expected_alpha()
+            self.expected_labels()
+            ll_1 = ll_2
+            ll_2 = self.log_posterior()
+            
+        
+    def log_posterior(self):
+        # just the log likelihood right now because im lazy ... 
+        return np.sum(np.log(self.densities.sum(1)))
+
+    def expected_labels(self):
+        if self.gpu:
+            densities = gpustats.mvnpdf_multi(self.data, self.mu, self.Sigma, 
+                                              weights=self.weights.flatten(), 
+                                              get=True, logged=True)
+        else:
+            densities = mvn_weighted_logged(self.data, self.mu, self.Sigma,
+                                            self.weights)
+
+        ## would like to do all of this on GPU also using scikits.cuda ....
+        densities = np.exp((densities.T - densities.max(1)).T)
+        norm = densities.sum(1)
+        densities = (densities.T / norm).T
+        self.densities = densities.copy()
+        self.ct = densities.sum(0)
+        self.xbar = np.dot(densities.T, self.data)
+
+
+    def expected_alpha(self):
+        sm = np.sum(np.log(1. - self.stick_weights[:-1]))
+        self.alpha = (self.ncomp + self.e - 1.) / (self.f - sm)
+
+    def maximize_mu(self):
+        self.mu = (np.tile(self.mu_prior_mean, (self.ncomp, 1)) + 
+                   np.tile(self.gamma, self(1, self.ndim))*self.xbar) \
+                   / np.tile(( 1. + self.gamma * self.ct ), (self.ncomp,1))
+
+    def maximize_Sigma(self):
+        df = self.ct + self._nu0 + 2*self.ndim + 3
+        for j in xrange(self.ncomp):
+            Xj_d = (self.data - self.xbar[j,:].flatten())
+            SS = np.dot(Xj_d.T * densities[:,j].flatten(), Xj_d)
+            SS += self._Phi0[j] + self.ct[j]*np.outer(
+                (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
+                (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
+            self.Sigma[j] = SS / df
+
+    def maximize_weights(self):
+        sm = np.cum(self.ct)
+        self.stick_weights = np.maximum(np.ones(len(self.stick_weights)),
+                                        self.ct / (self.alpha - 1 + sm))
+        self.stick_weights[-1]=1.
+
+        V = self.stick_weights[:-1]
+        pi = self.weights
+        
+        pi[0] = V[0]
+        prod = (1 - V[0])
+        for k in xrange(1, len(V)):
+            pi[k] = prod * V[k]
+            prod *= 1 - V[k]
+        pi[-1] = prod
+
 
 def mvn_weighted_logged(data, means, covs, weights):
     n, p = data.shape
