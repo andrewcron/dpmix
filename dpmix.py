@@ -87,24 +87,25 @@ class DPNormalMixture(object):
     def _set_initial_values(self, alpha0, nu0, Phi0, mu0, Sigma0, weights0,
                             e0, f0):
         if nu0 is None:
-            nu0 = 3
+            nu0 = 1
 
         if Phi0 is None:
             Phi0 = np.empty((self.ncomp, self.ndim, self.ndim))
             Phi0[:] = np.eye(self.ndim) * nu0
 
         if Sigma0 is None:
-            # draw from prior
+            # draw from prior .. bad idea for vague prior ...
             Sigma0 = np.empty((self.ncomp, self.ndim, self.ndim))
             for j in xrange(self.ncomp):
                 Sigma0[j] = pm.rinverse_wishart(nu0 + 1 + self.ndim, Phi0[j])
-
+            #Sigma0 = Phi0.copy()
+        print Sigma0
         # starting values, are these sensible?
         if mu0 is None:
             mu0 = np.empty((self.ncomp, self.ndim))
             for j in xrange(self.ncomp):
-                mu0[j] = pm.rmv_normal_cov(self.mu_prior_mean,
-                                           self.gamma[j] * Sigma0[j])
+                mu0[j] = pm.rmv_normal_cov(self.data.mean(0),
+                                           np.cov(self.data.T))
 
         if weights0 is None:
             weights0 = (1/self.ncomp)*np.ones((self.ncomp, 1))
@@ -284,7 +285,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
     """
 
-    def __init__(self, data, ncomp=256, gamma0=10, m0=None,
+    def __init__(self, data, ncomp=256, gamma0=100, m0=None,
                  nu0=None, Phi0=None, e0=1, f0=1,
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
                  gpu=None):
@@ -301,28 +302,28 @@ class BEM_DPNormalMixture(DPNormalMixture):
         self.e_labels = np.tile(self.weights.flatten(), (self.nobs, 1))
         self.densities = None
 
-    def optimize(self, maxiter=1000, perdiff=0.5):
+    def optimize(self, maxiter=1000, perdiff=0.0001):
         self.expected_labels()
         ll_2 = self.log_posterior()
         ll_1 = 1
         it = 0
-        while np.abs(ll_1 - ll_2)/ll_1 > 0.01*perdiff and it < maxiter:
+        while np.abs(ll_1 - ll_2) > 0.01*perdiff and it < maxiter:
             it += 1
             print it
             print ll_2
             self.maximize_mu()
-            pdb.set_trace()
             self.maximize_Sigma()
             self.maximize_weights()
             self.expected_alpha()
             self.expected_labels()
             ll_1 = ll_2
             ll_2 = self.log_posterior()
+        print ll_2
             
         
     def log_posterior(self):
         # just the log likelihood right now because im lazy ... 
-        return np.sum(np.log(self.densities.sum(1)))
+        return self.ll
 
     def expected_labels(self):
         if self.gpu:
@@ -334,15 +335,19 @@ class BEM_DPNormalMixture(DPNormalMixture):
                                             self.weights)
 
         ## would like to do all of this on GPU also using scikits.cuda ....
+        self.ll = np.sum(np.log(np.exp(densities).sum(1)))
         densities = np.exp((densities.T - densities.max(1)).T)
         norm = densities.sum(1)
         densities = (densities.T / norm).T
-        self.densities = densities.copy()
+        self.densities = densities
         self.ct = densities.sum(0)
         self.xbar = np.dot(densities.T, self.data)
 
     def expected_alpha(self):
-        sm = np.sum(np.log(1. - self.stick_weights[:-1]))
+        try:
+            sm = np.sum(np.log(1. - self.stick_weights[:-1]))
+        except FloatingPointError:
+            pdb.set_trace()
         self.alpha = (self.ncomp + self.e - 1.) / (self.f - sm)
 
     def maximize_mu(self):
@@ -354,17 +359,25 @@ class BEM_DPNormalMixture(DPNormalMixture):
     def maximize_Sigma(self):
         df = self.ct + self._nu0 + 2*self.ndim + 3
         for j in xrange(self.ncomp):
-            Xj_d = (self.data - self.xbar[j,:].flatten())
-            SS = np.dot(Xj_d.T * densities[:,j].flatten(), Xj_d)
-            SS += self._Phi0[j] + self.ct[j]*np.outer(
-                (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
-                (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
-            self.Sigma[j] = SS / df
+            if self.ct[j]>1:
+                Xj_d = (self.data - self.xbar[j,:]/self.ct[j])
+                #SS = np.zeros((self.ndim,self.ndim))
+                #for i in range(self.nobs):
+                #    SS += self.densities[i,j]*np.outer(Xj_d[i,:], Xj_d[i,:])
+                SS = np.dot(Xj_d.T * self.densities[:,j].flatten(), Xj_d)
+                #print SS-SS2
+                SS += self._Phi0[j] + (self.ct[j]/(1+self.gamma[j]*self.ct[j]))*np.outer(
+                    (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
+                    (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
+                self.Sigma[j] = SS / self.ct[j]
 
     def maximize_weights(self):
-        sm = np.cum(self.ct)
-        self.stick_weights = np.maximum(np.ones(len(self.stick_weights)),
-                                        self.ct / (self.alpha - 1 + sm))
+        sm = np.sum(self.ct)
+        self.stick_weights = np.minimum(np.ones(len(self.stick_weights))-1e-10,
+                                        self.ct / (self.alpha - 1 + 
+                                                   self.ct[::-1].cumsum()[::-1]))
+        self.stick_weights = np.maximum(np.ones(len(self.stick_weights))*1e-10, 
+                                        self.stick_weights)
         self.stick_weights[-1]=1.
 
         V = self.stick_weights[:-1]
@@ -527,18 +540,19 @@ if __name__ == '__main__':
     N = int(1e4) # n data points per component
     K = 2 # ndim
     ncomps = 3 # n mixture components
-    npr.seed(1)
+    #npr.seed(1)
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
-    data = data - data.mean(0)
-    data = data/data.std(0)
+    #data = data - data.mean(0)
+    #data = data/data.std(0)
 
-    model = BEM_DPNormalMixture(data, ncomp=3, gpu=False)
-    model.optimize()
+    model = BEM_DPNormalMixture(data, ncomp=4, gpu=False)
+    model.optimize(maxiter=100)
+    pdb.set_trace()
     #model.sample(1000,nburn=100)
     #print model.stick_weights
-    mu = model.mu
-    print model.weights[-1]
-    pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
-    pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
-    pylab.show()
+    #mu = model.mu
+    #print model.weights[-1]
+    #pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
+    #pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
+    #pylab.show()
 
