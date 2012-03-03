@@ -27,7 +27,11 @@ def gpu_sweep_col_diff(X, y):
     gridsize = int(dims[0] / blocksize) + 1
     shared = 4*16
 
-    func = CUDA_Kernels.get_function("sweep_columns_diff")
+    if gX.flags.c_contiguous:
+        func = CUDA_Kernels.get_function("sweep_columns_diff")
+    else:
+        func = CUDA_Kernels.get_function("sweep_columns_diff_cm")
+
     func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
          grid = (gridsize,1), shared = shared)
 
@@ -56,7 +60,11 @@ def gpu_sweep_col_div(X, y):
     gridsize = int(dims[0] / blocksize) + 1
     shared = 4*16
 
-    func = CUDA_Kernels.get_function("sweep_columns_div")
+    if gX.flags.c_contiguous:
+        func = CUDA_Kernels.get_function("sweep_columns_div")
+    else:
+        func = CUDA_Kernels.get_function("sweep_columns_div_cm")
+
     func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
          grid = (gridsize,1), shared = shared)
 
@@ -85,7 +93,10 @@ def gpu_sweep_row_diff(X, y):
     gridsize = int(dims[0] / blocksize) + 1
     shared = 4*dim[1]
 
-    func = CUDA_Kernels.get_function("sweep_columns_diff")
+    if gX.flags.c_contiguous:
+        func = CUDA_Kernels.get_function("sweep_columns_diff")
+    else:
+        func = CUDA_Kernels.get_function("sweep_columns_diff_cm")
     func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
          grid = (gridsize,1), shared = shared)
 
@@ -113,7 +124,11 @@ def gpu_sweep_row_div(X, y):
     gridsize = int(dims[0] / blocksize) + 1
     shared = 4*dim[1]
 
-    func = CUDA_Kernels.get_function("sweep_columns_div")
+    if gX.flags.c_contiguous:
+        func = CUDA_Kernels.get_function("sweep_columns_div")
+    else:
+        func = CUDA_Kernels.get_functions("sweep_columns_div_cm")
+
     func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
          grid = (gridsize,1), shared = shared)
 
@@ -143,7 +158,11 @@ def gpu_apply_row_max(X):
     gridsize = int(dims[0] / blocksize) + 1
     shared = 4*blocksize*(blocksize+1)
 
-    func = CUDA_Kernels.get_function("apply_rows_max")
+    if gX.flags.c_contiguous:
+        func = CUDA_Kernels.get_function("apply_rows_max")
+    else:
+        func = CUDA_Kernels.get_function("apply_rows_max_cm")
+
     func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
          grid = (gridsize,1), shared = shared)
 

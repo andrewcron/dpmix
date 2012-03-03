@@ -13,5 +13,11 @@ full_code += open(pth.join(cu_file_path,"sweep_rows.cu")).read() % { 'name' : 'd
 full_code += open(pth.join(cu_file_path,"sweep_columns.cu")).read() % { 'name' : 'diff' }
 full_code += open(pth.join(cu_file_path,"sweep_columns.cu")).read() % { 'name' : 'div' }
 full_code += open(pth.join(cu_file_path,"apply_rows_max.cu")).read() % { 'name' : 'diff' }
+full_code += open(pth.join(cu_file_path,"sweep_rows_cm.cu")).read() % { 'name' : 'diff' }
+full_code += open(pth.join(cu_file_path,"sweep_rows_cm.cu")).read() % { 'name' : 'div' }
+full_code += open(pth.join(cu_file_path,"sweep_columns_cm.cu")).read() % { 'name' : 'diff' }
+full_code += open(pth.join(cu_file_path,"sweep_columns_cm.cu")).read() % { 'name' : 'div' }
+full_code += open(pth.join(cu_file_path,"apply_rows_max_cm.cu")).read() % { 'name' : 'diff' }
+
 
 CUDA_Kernels = SourceModule(full_code)

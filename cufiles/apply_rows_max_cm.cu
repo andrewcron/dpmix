@@ -1,6 +1,6 @@
 
 __global__ void
-apply_rows_max(float* X, /** matrix to apply .. row major **/
+apply_rows_max_cm(float* X, /** matrix to apply ... column major **/
 	               	      float* y, /** result vector  **/
 			      int rows,
 			      int cols
@@ -20,7 +20,7 @@ apply_rows_max(float* X, /** matrix to apply .. row major **/
   float cur_val;
   for(int chunk = 0; chunk < cols; chunk+=bdx){
   	  // get some values chunking accross rows ...
-	  shared_data[thidx*bdx + thidy] = X[(currow + thidy)*cols + chunk + thidx];	
+	  shared_data[thidy*bdx + thidx] = X[thidx + currow + (chunk + thidy)*rows];	
 	  __syncthreads();
 	  // get maximum in chunk ...
   	  if( thidy == 0 && thidx + currow < rows ){
@@ -32,11 +32,11 @@ apply_rows_max(float* X, /** matrix to apply .. row major **/
                    }
 	      }
 	      // save values
-	      y[currow+thidx] = sh_max[thidx];
+	      cur_val = y[currow+thidx];
+	      y[currow+thidx] = fmax(cur_val, sh_max[thidx]);
 	  }
 	  __syncthreads();
   }
 
 }
 
-   

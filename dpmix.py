@@ -6,7 +6,10 @@ Ishwaran & James (2001) Gibbs Sampling Methods for Stick-Breaking Priors
 """
 from __future__ import division
 
-import matplotlib.pyplot as plt
+import sys
+pth = ['', '/home/andrewcron/local/lib/python2.7/site-packages']
+pth+=sys.path
+sys.path=pth
 
 import scipy.stats as stats
 import scipy.linalg as LA
@@ -18,22 +21,22 @@ import pymc as pm
 import pdb
 
 # check for gpustats compatability
-#try:
-import gpustats
-import gpustats.sampler
-import pycuda.gpuarray as gpuarray
-from pycuda import cumath
-from scikits.cuda import linalg as cuLA
-from scikits.cuda import misc as cumisc
-from cuda_functions import gpu_sweep_col_diff
-from cuda_functions import gpu_sweep_col_div
-from cuda_functions import gpu_sweep_row_diff
-from cuda_functions import gpu_apply_row_max
-_has_gpu = True
-#except ImportError:
-#    _has_gpu = False
-
-#import statlib.ffbs as ffbs
+try:
+    import gpustats
+    import gpustats.sampler
+    import pycuda.gpuarray as gpuarray
+    from pycuda.gpuarray import to_gpu
+    from pycuda import cumath
+    from pycuda.elementwise import ElementwiseKernel
+    from scikits.cuda import linalg as cuLA
+    from cuda_functions import gpu_sweep_col_diff
+    from cuda_functions import gpu_sweep_col_div
+    from cuda_functions import gpu_sweep_row_diff
+    from cuda_functions import gpu_apply_row_max
+    inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
+    _has_gpu = True
+except ImportError:
+    _has_gpu = False
 
 import pylab
 
@@ -72,7 +75,7 @@ class DPNormalMixture(object):
                 self.gpu = _has_gpu
         else:
             self.gpu = False
-
+            
         self.data = np.asarray(data)
         self.nobs, self.ndim = self.data.shape
         self.ncomp = ncomp
@@ -88,6 +91,12 @@ class DPNormalMixture(object):
             self.mu_prior_mean = np.zeros(self.ndim)
 
         self.gamma = gamma0*np.ones(ncomp)
+
+        # set gpu working vars
+        if gpu:
+            self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
+            self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
+            self.g_ones_long = to_gpu(np.ones((self.nobs,1), dtype=np.float32))
 
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, e0, f0)
@@ -332,32 +341,39 @@ class BEM_DPNormalMixture(DPNormalMixture):
     def log_posterior(self):
         # just the log likelihood right now because im lazy ... 
         return self.ll
-
+    ll=0;
+    _logmnflt = np.log(1e-37)
     def expected_labels(self):
         if self.gpu:
             densities = gpustats.mvnpdf_multi(self.data, self.mu, self.Sigma, 
                                               weights=self.weights.flatten(), 
                                               get=False, logged=True)
-            g_ones = gpuarray.to_gpu(np.ones((self.ncomp,1),dtype=np.float32))
+
+
+            tdens = densities.reshape(self.ncomp, self.nobs, "C")
+            #self.ll = cuLA.dot(self.g_ones, cumath.exp(tdens), "T").get()
+            #nmzero = np.sum(self.ll==0)
+            #self.ll = np.sum(np.log(self.ll[self.ll>0])) + nmzero*self._logmnflt
+            self.ll+=100
             nrm = gpu_apply_row_max(densities)
             gpu_sweep_col_diff(densities, nrm)
-            densities = cumath.exp(densities)
-            nrm = cuLA.dot(densities, g_ones)
+            inplace_exp(densities)
+            nrm = cuLA.dot(self.g_ones, tdens, "T").ravel()
             gpu_sweep_col_div(densities, nrm)
-            dT = cuLA.transpose(densities)
-            self.ct = cuLA.dot(dT, np.ones((self.nobs,1), dtype=np.float32))
-            self.xbar = cuLA.dot(dT, self.data)
+
+            self.ct = cuLA.dot(tdens, self.g_ones_long).get().flatten()
+            self.xbar = cuLA.dot(tdens, self.gdata).get()
+            self.densities = densities.get()
             pdb.set_trace()
         else:
-            densities = mvn_weighted_logged(self.data, self.mu, self.Sigma,
-                                            self.weights)
+            densities = mvn_weighted_logged(self.data, self.mu, self.Sigma, self.weights)
             densities = np.exp(densities)
             norm = densities.sum(1)
             self.ll = np.sum(np.log(norm))
             densities = (densities.T / norm).T
             self.ct = densities.sum(0)
             self.xbar = np.dot(densities.T, self.data)
-        self.densities = densities
+            self.densities = densities
 
     def expected_alpha(self):
         try:
@@ -549,10 +565,11 @@ def plot_2d_mixture(data, labels):
         plt.plot(x, y, '%s.' % colors[j], ms=2)
 
 if __name__ == '__main__':
+    from datetime import datetime
     N = int(1e4) # n data points per component
     K = 2 # ndim
     ncomps = 3 # n mixture components
-    npr.seed()
+    npr.seed(datetime.now().microsecond)
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
     #data = data - data.mean(0)
     #data = data/data.std(0)

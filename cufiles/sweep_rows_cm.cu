@@ -1,6 +1,6 @@
 
 __global__ void
-sweep_rows_%(name)s(float* X, /** matrix to sweep in place **/
+sweep_rows_%(name)s_cm(float* X, /** matrix to sweep in place **/
 	               	      float* y, /** row vector to remove **/
 			      int rows,
 			      int cols
@@ -26,12 +26,12 @@ sweep_rows_%(name)s(float* X, /** matrix to sweep in place **/
   }
   __syncthreads();
 
-  if(currow + thidy < rows) {
+  if(currow + thidx < rows) {
     for(int chunk = 0; chunk < cols; chunk+=bdx){
     	  // get some values chunking accross rows ...
-	  if(chunk + thidx < cols){
-	     X[(currow + thidy)*cols + chunk + thidx] = \
-	     	l_%(name)s(X[(currow + thidy)*cols + chunk + thidx], shared_data[chunk+thidx]);
+	  if(chunk + thidy < cols){
+	     X[currow + thidx + rows*(chunk + thidy)] = \
+	     	l_%(name)s(X[currow + thidx + rows*(chunk + thidy)], shared_data[chunk+thidy]);
 	  }	
     }
   }
