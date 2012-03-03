@@ -18,12 +18,20 @@ import pymc as pm
 import pdb
 
 # check for gpustats compatability
-try:
-    import gpustats
-    import gpustats.sampler
-    _has_gpu = True
-except ImportError:
-    _has_gpu = False
+#try:
+import gpustats
+import gpustats.sampler
+import pycuda.gpuarray as gpuarray
+from pycuda import cumath
+from scikits.cuda import linalg as cuLA
+from scikits.cuda import misc as cumisc
+from cuda_functions import gpu_sweep_col_diff
+from cuda_functions import gpu_sweep_col_div
+from cuda_functions import gpu_sweep_row_diff
+from cuda_functions import gpu_apply_row_max
+_has_gpu = True
+#except ImportError:
+#    _has_gpu = False
 
 #import statlib.ffbs as ffbs
 
@@ -99,7 +107,7 @@ class DPNormalMixture(object):
             for j in xrange(self.ncomp):
                 Sigma0[j] = pm.rinverse_wishart(nu0 + 1 + self.ndim, Phi0[j])
             #Sigma0 = Phi0.copy()
-        print Sigma0
+
         # starting values, are these sensible?
         if mu0 is None:
             mu0 = np.empty((self.ncomp, self.ndim))
@@ -329,19 +337,27 @@ class BEM_DPNormalMixture(DPNormalMixture):
         if self.gpu:
             densities = gpustats.mvnpdf_multi(self.data, self.mu, self.Sigma, 
                                               weights=self.weights.flatten(), 
-                                              get=True, logged=True)
+                                              get=False, logged=True)
+            g_ones = gpuarray.to_gpu(np.ones((self.ncomp,1),dtype=np.float32))
+            nrm = gpu_apply_row_max(densities)
+            gpu_sweep_col_diff(densities, nrm)
+            densities = cumath.exp(densities)
+            nrm = cuLA.dot(densities, g_ones)
+            gpu_sweep_col_div(densities, nrm)
+            dT = cuLA.transpose(densities)
+            self.ct = cuLA.dot(dT, np.ones((self.nobs,1), dtype=np.float32))
+            self.xbar = cuLA.dot(dT, self.data)
+            pdb.set_trace()
         else:
             densities = mvn_weighted_logged(self.data, self.mu, self.Sigma,
                                             self.weights)
-
-        ## would like to do all of this on GPU also using scikits.cuda ....
-        self.ll = np.sum(np.log(np.exp(densities).sum(1)))
-        densities = np.exp((densities.T - densities.max(1)).T)
-        norm = densities.sum(1)
-        densities = (densities.T / norm).T
+            densities = np.exp(densities)
+            norm = densities.sum(1)
+            self.ll = np.sum(np.log(norm))
+            densities = (densities.T / norm).T
+            self.ct = densities.sum(0)
+            self.xbar = np.dot(densities.T, self.data)
         self.densities = densities
-        self.ct = densities.sum(0)
-        self.xbar = np.dot(densities.T, self.data)
 
     def expected_alpha(self):
         try:
@@ -361,11 +377,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
         for j in xrange(self.ncomp):
             if self.ct[j]>1:
                 Xj_d = (self.data - self.xbar[j,:]/self.ct[j])
-                #SS = np.zeros((self.ndim,self.ndim))
-                #for i in range(self.nobs):
-                #    SS += self.densities[i,j]*np.outer(Xj_d[i,:], Xj_d[i,:])
                 SS = np.dot(Xj_d.T * self.densities[:,j].flatten(), Xj_d)
-                #print SS-SS2
                 SS += self._Phi0[j] + (self.ct[j]/(1+self.gamma[j]*self.ct[j]))*np.outer(
                     (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
                     (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
@@ -540,14 +552,15 @@ if __name__ == '__main__':
     N = int(1e4) # n data points per component
     K = 2 # ndim
     ncomps = 3 # n mixture components
-    #npr.seed(1)
+    npr.seed()
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
     #data = data - data.mean(0)
     #data = data/data.std(0)
 
-    model = BEM_DPNormalMixture(data, ncomp=4, gpu=False)
+    model = BEM_DPNormalMixture(data, ncomp=4, gpu=True)
     model.optimize(maxiter=100)
     pdb.set_trace()
+    #pdb.set_trace()
     #model.sample(1000,nburn=100)
     #print model.stick_weights
     #mu = model.mu
