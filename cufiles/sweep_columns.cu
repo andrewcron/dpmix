@@ -15,8 +15,8 @@ sweep_columns_%(name)s(float* X, /** matrix to sweep in place **/
   // flexible block size 
   extern __shared__ float shared_data[];
   
-
-  shared_data[thidx] = y[currow+thidx];
+  if(currow+thidx < rows){
+    shared_data[thidx] = y[currow+thidx];}
   __syncthreads();
 
   for(int chunk = 0; chunk < cols; chunk+=bdx){

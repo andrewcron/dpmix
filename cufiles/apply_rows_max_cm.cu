@@ -16,27 +16,36 @@ apply_rows_max_cm(float* X, /** matrix to apply ... column major **/
   // flexible block size 
   extern __shared__ float shared_data[];
   float *sh_max = shared_data + bdx*bdx;
-  
+
+  // initialize ...
+  if( thidy == 0 && thidx + currow < rows ){
+      y[currow+thidx] = -1e37;
+      sh_max[thidx] = -1e37;
+  }
+  __syncthreads();  
+
   float cur_val;
   for(int chunk = 0; chunk < cols; chunk+=bdx){
   	  // get some values chunking accross rows ...
-	  shared_data[thidy*bdx + thidx] = X[thidx + currow + (chunk + thidy)*rows];	
+	  if( thidx + currow < rows && chunk + thidy < cols ){
+	      shared_data[thidy*bdx + thidx] = X[thidx + currow + (chunk + thidy)*rows];	
+	  }
 	  __syncthreads();
 	  // get maximum in chunk ...
   	  if( thidy == 0 && thidx + currow < rows ){
-	      sh_max[thidx] = shared_data[thidx];
-	      for( int i = 1; i < bdx; i++){
+	      for( int i = 0; i < bdx; i++){
 	      	   if(chunk + i < cols){
 	      	      cur_val = sh_max[thidx];
-	      	      sh_max[thidx]  = fmax(cur_val, shared_data[i*bdx + thidx]);
+	      	      sh_max[thidx] = fmax(cur_val, shared_data[i*bdx + thidx]);
                    }
 	      }
-	      // save values
-	      cur_val = y[currow+thidx];
-	      y[currow+thidx] = fmax(cur_val, sh_max[thidx]);
 	  }
 	  __syncthreads();
   }
+
+  // save results
+  if(thidx + currow < rows && thidy==0){
+    y[currow + thidx] = sh_max[thidx];}
 
 }
 

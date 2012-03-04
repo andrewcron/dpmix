@@ -29,11 +29,10 @@ try:
     from pycuda import cumath
     from pycuda.elementwise import ElementwiseKernel
     from scikits.cuda import linalg as cuLA
-    from cuda_functions import gpu_sweep_col_diff
-    from cuda_functions import gpu_sweep_col_div
-    from cuda_functions import gpu_sweep_row_diff
-    from cuda_functions import gpu_apply_row_max
+    from cuda_functions import *
     inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
+    inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
+    gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
     _has_gpu = True
 except ImportError:
     _has_gpu = False
@@ -319,7 +318,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
         self.e_labels = np.tile(self.weights.flatten(), (self.nobs, 1))
         self.densities = None
 
-    def optimize(self, maxiter=1000, perdiff=0.0001):
+    def optimize(self, maxiter=1000, perdiff=-1):
         self.expected_labels()
         ll_2 = self.log_posterior()
         ll_1 = 1
@@ -351,20 +350,20 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
 
             tdens = densities.reshape(self.ncomp, self.nobs, "C")
-            #self.ll = cuLA.dot(self.g_ones, cumath.exp(tdens), "T").get()
-            #nmzero = np.sum(self.ll==0)
-            #self.ll = np.sum(np.log(self.ll[self.ll>0])) + nmzero*self._logmnflt
-            self.ll+=100
+            self.ll = cuLA.dot(self.g_ones, cumath.exp(tdens), "T").get()
+            nmzero = np.sum(self.ll==0)
+            self.ll = np.sum(np.log(self.ll[self.ll>0])) + nmzero*self._logmnflt
+            
             nrm = gpu_apply_row_max(densities)
             gpu_sweep_col_diff(densities, nrm)
             inplace_exp(densities)
-            nrm = cuLA.dot(self.g_ones, tdens, "T").ravel()
+            nrm = cuLA.dot(self.g_ones, tdens, "T")
             gpu_sweep_col_div(densities, nrm)
 
             self.ct = cuLA.dot(tdens, self.g_ones_long).get().flatten()
             self.xbar = cuLA.dot(tdens, self.gdata).get()
-            self.densities = densities.get()
-            pdb.set_trace()
+            self.densities = densities
+
         else:
             densities = mvn_weighted_logged(self.data, self.mu, self.Sigma, self.weights)
             densities = np.exp(densities)
@@ -376,10 +375,8 @@ class BEM_DPNormalMixture(DPNormalMixture):
             self.densities = densities
 
     def expected_alpha(self):
-        try:
-            sm = np.sum(np.log(1. - self.stick_weights[:-1]))
-        except FloatingPointError:
-            pdb.set_trace()
+        
+        sm = np.sum(np.log(1. - self.stick_weights[:-1]))
         self.alpha = (self.ncomp + self.e - 1.) / (self.f - sm)
 
     def maximize_mu(self):
@@ -390,14 +387,30 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
     def maximize_Sigma(self):
         df = self.ct + self._nu0 + 2*self.ndim + 3
-        for j in xrange(self.ncomp):
-            if self.ct[j]>1:
-                Xj_d = (self.data - self.xbar[j,:]/self.ct[j])
-                SS = np.dot(Xj_d.T * self.densities[:,j].flatten(), Xj_d)
-                SS += self._Phi0[j] + (self.ct[j]/(1+self.gamma[j]*self.ct[j]))*np.outer(
-                    (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
-                    (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
-                self.Sigma[j] = SS / self.ct[j]
+        if self.gpu:
+            inplace_sqrt(self.densities)
+            fltdens = self.densities.ravel()
+            self.xbar = (self.xbar.T / self.ct).T
+            for j in xrange(self.ncomp):
+                if self.ct[j]>0.1:
+                    Xj_d = self.gdata._new_like_me(); gpu_copy(Xj_d, self.gdata);
+                    cdens = fltdens[(j*self.nobs):((j+1)*self.nobs)]
+                    gpu_sweep_row_diff(Xj_d, self.xbar[j,:].flatten())
+                    gpu_sweep_col_mult(Xj_d, cdens)
+                    SS = cuLA.dot(Xj_d, Xj_d, "T").get()
+                    SS += self._Phi0[j] + (self.ct[j]/(1+self.gamma[j]*self.ct[j]))*np.outer(
+                        (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
+                        (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
+                    self.Sigma[j] = SS / self.ct[j]
+        else:
+            for j in xrange(self.ncomp):
+                if self.ct[j]>0.1:
+                    Xj_d = (self.data - self.xbar[j,:]/self.ct[j])
+                    SS = np.dot(Xj_d.T * self.densities[:,j].flatten(), Xj_d)
+                    SS += self._Phi0[j] + (self.ct[j]/(1+self.gamma[j]*self.ct[j]))*np.outer(
+                        (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
+                        (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
+                    self.Sigma[j] = SS / self.ct[j]
 
     def maximize_weights(self):
         sm = np.sum(self.ct)
@@ -575,7 +588,7 @@ if __name__ == '__main__':
     #data = data/data.std(0)
 
     model = BEM_DPNormalMixture(data, ncomp=4, gpu=True)
-    model.optimize(maxiter=100)
+    model.optimize(maxiter=200)
     pdb.set_trace()
     #pdb.set_trace()
     #model.sample(1000,nburn=100)
