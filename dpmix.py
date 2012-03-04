@@ -202,8 +202,10 @@ class DPNormalMixture(object):
         if self.gpu:
             # GPU business happens?
 	    print self.data.shape, weights.shape, mu.shape, Sigma.shape
-            densities = gpustats.mvnpdf_multi(self.data, mu, Sigma, weights=weights.flatten(), get=True, logged=True)
-            #return gpustats.sampler.sample_discrete(densities, logged=True)
+            densities = gpustats.mvnpdf_multi(self.gdata, mu, Sigma, 
+                                              weights=weights.flatten(), 
+                                              get=False, logged=True, order='C')
+            return gpustats.sampler.sample_discrete(densities, logged=True)
             #rslt =  gpustats.sampler.sample_discrete(densities, logged=True)
             
             #f = np.exp((densities.T - densities.max(1)).T)
@@ -212,7 +214,7 @@ class DPNormalMixture(object):
             #f = (f.T / norm).T
             #print f[[0,400,600,700,900,950],:]
             #return rslt
-            return sample_discrete(densities, logged=True).squeeze()
+            #return sample_discrete(densities, logged=True).squeeze()
         else:
             densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
             return sample_discrete(densities).squeeze()
@@ -318,12 +320,12 @@ class BEM_DPNormalMixture(DPNormalMixture):
         self.e_labels = np.tile(self.weights.flatten(), (self.nobs, 1))
         self.densities = None
 
-    def optimize(self, maxiter=1000, perdiff=-1):
+    def optimize(self, maxiter=1000, perdiff=0.1):
         self.expected_labels()
         ll_2 = self.log_posterior()
         ll_1 = 1
         it = 0
-        while np.abs(ll_1 - ll_2) > 0.01*perdiff and it < maxiter:
+        while np.abs(ll_1 - ll_2) > np.log(0.01*perdiff) and it < maxiter:
             it += 1
             print it
             print ll_2
@@ -344,10 +346,9 @@ class BEM_DPNormalMixture(DPNormalMixture):
     _logmnflt = np.log(1e-37)
     def expected_labels(self):
         if self.gpu:
-            densities = gpustats.mvnpdf_multi(self.data, self.mu, self.Sigma, 
+            densities = gpustats.mvnpdf_multi(self.gdata, self.mu, self.Sigma, 
                                               weights=self.weights.flatten(), 
                                               get=False, logged=True)
-
 
             tdens = densities.reshape(self.ncomp, self.nobs, "C")
             self.ll = cuLA.dot(self.g_ones, cumath.exp(tdens), "T").get()
@@ -587,11 +588,11 @@ if __name__ == '__main__':
     #data = data - data.mean(0)
     #data = data/data.std(0)
 
-    model = BEM_DPNormalMixture(data, ncomp=4, gpu=True)
-    model.optimize(maxiter=200)
+    #model = BEM_DPNormalMixture(data, ncomp=4, gpu=True)
+    #model.optimize(maxiter=200)
+    model = DPNormalMixture(data, ncomp=4, gpu=True)
+    model.sample(1000,nburn=100)
     pdb.set_trace()
-    #pdb.set_trace()
-    #model.sample(1000,nburn=100)
     #print model.stick_weights
     #mu = model.mu
     #print model.weights[-1]
