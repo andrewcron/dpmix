@@ -18,7 +18,6 @@ import numpy as np
 import numpy.random as npr
 
 import pymc as pm
-import pdb
 
 # check for gpustats compatability
 try:
@@ -38,6 +37,7 @@ except ImportError:
     _has_gpu = False
 
 import pylab
+import pdb
 
 class DPNormalMixture(object):
     """
@@ -45,7 +45,7 @@ class DPNormalMixture(object):
 
     Parameters
     ----------
-    data : ndarray (nobs x ndim)
+    data : ndarray (nobs x ndim) or (BEM_)DPNormalMixture class
     ncomp : int
         Number of mixture components
 
@@ -57,6 +57,7 @@ class DPNormalMixture(object):
 
     Citation
     --------
+    
 
     Returns
     -------
@@ -67,36 +68,60 @@ class DPNormalMixture(object):
                  nu0=None, Phi0=None, e0=1, f0=1,
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
                  gpu=None):
-        if _has_gpu:
-            if gpu is not None:
-                self.gpu = gpu
+        if issubclass(type(data), DPNormalMixture):
+            self.data = data.data
+            self.nobs, self.ndim = self.data.shape
+            self.ncomp = data.ncomp
+            self.mu_prior_mean = data.mu_prior_mean
+            nu0 = data._nu0
+            Phi0 = data._Phi0
+            if len(data.mu.shape)>2:
+                mu0 = data.mu[-1].copy()
+                Sigma0 = data.Sigma[-1].copy()
+                weights0 = data.weights[-1].copy()
             else:
-                self.gpu = _has_gpu
+                mu0 = data.mu.copy()
+                Sigma0 = data.Sigma.copy()
+                weights0 = data.weights.copy()
+            e0 = data.e
+            f0 = data.f
+            self.gamma = data.gamma
+            self.gpu = data.gpu
+            if self.gpu:
+                self.gdata = data.gdata
+                self.g_ones = data.g_ones
+                self.g_ones_long = data.g_ones_long
         else:
-            self.gpu = False
-            
-        self.data = np.asarray(data)
-        self.nobs, self.ndim = self.data.shape
-        self.ncomp = ncomp
+            if _has_gpu:
+                if gpu is not None:
+                    self.gpu = gpu
+                else:
+                    self.gpu = _has_gpu
+            else:
+                self.gpu = False
+                
+            self.data = np.asarray(data)
+            self.nobs, self.ndim = self.data.shape
+            self.ncomp = ncomp
 
-        # TODO hyperparameters
-        # prior mean for component means
-        if m0 is not None:
-            if len(m0)==self.ndim:
-                self.mu_prior_mean = m0.copy()
-            elif len(m0)==1:
-                self.mu_prior_mean = m0*np.ones(self.ndim)
-        else:
-            self.mu_prior_mean = np.zeros(self.ndim)
+            # TODO hyperparameters
+            # prior mean for component means
+            if m0 is not None:
+                if len(m0)==self.ndim:
+                    self.mu_prior_mean = m0.copy()
+                elif len(m0)==1:
+                    self.mu_prior_mean = m0*np.ones(self.ndim)
+            else:
+                self.mu_prior_mean = np.zeros(self.ndim)
 
-        self.gamma = gamma0*np.ones(ncomp)
-
+            self.gamma = gamma0*np.ones(ncomp)
+                        
         # set gpu working vars
-        if gpu:
-            self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
-            self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
-            self.g_ones_long = to_gpu(np.ones((self.nobs,1), dtype=np.float32))
-
+            if gpu:
+                self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
+                self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
+                self.g_ones_long = to_gpu(np.ones((self.nobs,1), dtype=np.float32))
+                
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, e0, f0)
 
@@ -150,8 +175,8 @@ class DPNormalMixture(object):
         for i in range(-nburn, niter):
             labels = self._update_labels(mu, Sigma, weights)
 	    #print labels[[0,400,600,700,900,950]]
-            print mu
-            print alpha
+            #print mu
+            #print alpha
 
             component_mask = _get_mask(labels, self.ncomp)
             counts = component_mask.sum(1)
@@ -201,28 +226,18 @@ class DPNormalMixture(object):
     def _update_labels(self, mu, Sigma, weights):
         if self.gpu:
             # GPU business happens?
-	    print self.data.shape, weights.shape, mu.shape, Sigma.shape
+	    #print self.data.shape, weights.shape, mu.shape, Sigma.shape
             densities = gpustats.mvnpdf_multi(self.gdata, mu, Sigma, 
                                               weights=weights.flatten(), 
                                               get=False, logged=True, order='C')
             return gpustats.sampler.sample_discrete(densities, logged=True)
-            #rslt =  gpustats.sampler.sample_discrete(densities, logged=True)
             
-            #f = np.exp((densities.T - densities.max(1)).T)
-            #norm = f.sum(1)
-            #print f, norm
-            #f = (f.T / norm).T
-            #print f[[0,400,600,700,900,950],:]
-            #return rslt
-            #return sample_discrete(densities, logged=True).squeeze()
         else:
             densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
             return sample_discrete(densities).squeeze()
 
     def _update_stick_weights(self, counts, alpha):
-        """
 
-        """
         reverse_cumsum = counts[::-1].cumsum()[::-1]
 
         a = 1 + counts[:-1]
@@ -282,7 +297,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
     Parameters
     ----------
-    data : ndarray (nobs x ndim)
+    data : ndarray (nobs x ndim)  or (BEM_)DPNormalMixture class
     ncomp : int
         Number of mixture components
 
@@ -325,7 +340,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
         ll_2 = self.log_posterior()
         ll_1 = 1
         it = 0
-        while np.abs(ll_1 - ll_2) > np.log(0.01*perdiff) and it < maxiter:
+        while np.abs(ll_1 - ll_2) > 0.01*perdiff and it < maxiter:
             it += 1
             print it
             print ll_2
@@ -588,10 +603,12 @@ if __name__ == '__main__':
     #data = data - data.mean(0)
     #data = data/data.std(0)
 
-    #model = BEM_DPNormalMixture(data, ncomp=4, gpu=True)
-    #model.optimize(maxiter=200)
-    model = DPNormalMixture(data, ncomp=4, gpu=True)
-    model.sample(1000,nburn=100)
+    import pdb
+    mcmc = DPNormalMixture(data, ncomp=4, gpu=True)
+    mcmc.sample(100,nburn=100)
+    pdb.set_trace()
+    bem = BEM_DPNormalMixture(mcmc, ncomp=4, gpu=True)
+    bem.optimize(maxiter=200)
     pdb.set_trace()
     #print model.stick_weights
     #mu = model.mu
