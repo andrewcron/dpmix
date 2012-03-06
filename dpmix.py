@@ -6,11 +6,6 @@ Ishwaran & James (2001) Gibbs Sampling Methods for Stick-Breaking Priors
 """
 from __future__ import division
 
-import sys
-pth = ['', '/home/andrewcron/local/lib/python2.7/site-packages']
-pth+=sys.path
-sys.path=pth
-
 import scipy.stats as stats
 import scipy.linalg as LA
 
@@ -37,7 +32,6 @@ except ImportError:
     _has_gpu = False
 
 import pylab
-import pdb
 
 class DPNormalMixture(object):
     """
