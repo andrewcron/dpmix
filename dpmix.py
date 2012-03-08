@@ -1,5 +1,5 @@
 """
-Notes
+otes
 -----
 References
 Ishwaran & James (2001) Gibbs Sampling Methods for Stick-Breaking Priors
@@ -14,24 +14,34 @@ import numpy.random as npr
 
 import pymc as pm
 
+try:
+    from munkres import munkres
+except ImportError:
+    _has_munkres = False
+
 # check for gpustats compatability
 try:
-    import gpustats
-    import gpustats.sampler
-    import pycuda.gpuarray as gpuarray
-    from pycuda.gpuarray import to_gpu
-    from pycuda import cumath
-    from pycuda.elementwise import ElementwiseKernel
-    from scikits.cuda import linalg as cuLA
-    from cuda_functions import *
-    inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
-    inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
-    gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
-    _has_gpu = True
+    import pycuda
+    try:
+        import gpustats
+        import gpustats.sampler
+        import pycuda.gpuarray as gpuarray
+        from pycuda.gpuarray import to_gpu
+        from pycuda import cumath
+        from pycuda.elementwise import ElementwiseKernel
+        from scikits.cuda import linalg as cuLA
+        from cuda_functions import *
+        inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
+        inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
+        gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
+        _has_gpu = True
+    except (ImportError, pycuda._driver.RuntimeError):
+        _has_gpu=False
 except ImportError:
     _has_gpu = False
 
 import pylab
+import pdb
 
 class DPNormalMixture(object):
     """
@@ -156,7 +166,16 @@ class DPNormalMixture(object):
         self._nu0 = nu0 # prior degrees of freedom
         self._Phi0 = Phi0 # prior location for Sigma_j's
 
-    def sample(self, niter=1000, nburn=0, thin=1):
+    def sample(self, niter=1000, nburn=0, thin=1, ident=False):
+        """
+        samples niter + nburn iterations only storing the last niter
+        draws thinned as indicated.
+
+        if ident is True the munkres identification algorithm will be used
+        identifying to the INITIAL VALUES. These should be selected with 
+        great care. Also .. burning doesn't make much sense in this case.
+        """
+
         self._setup_storage(niter)
 
         alpha = self._alpha0
@@ -164,13 +183,25 @@ class DPNormalMixture(object):
         mu = self._mu0
         Sigma = self._Sigma0
 
-        #ax = plt.gca()
 
         for i in range(-nburn, niter):
             labels = self._update_labels(mu, Sigma, weights)
-	    #print labels[[0,400,600,700,900,950]]
-            #print mu
-            #print alpha
+
+            ## gets reference and iteration classifiers ... 
+            if ident and i==-nburn:
+                if self.gpu:
+                    zref = gpu_apply_row_max(self._densities)[1].get()
+                else:
+                    zref = self._densities.argmax(1) 
+                c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
+                for i in xrange(self.ncomp):
+                    c0[i,:] = np.sum(zref==i)
+                zhat = zref.copy()
+            elif ident:
+                if self.gpu:
+                    zhet = gpu_apply_row_max(self._densities)[1].get()
+                else:
+                    zhat = self._densities.argmax(1)
 
             component_mask = _get_mask(labels, self.ncomp)
             counts = component_mask.sum(1)
@@ -179,22 +210,18 @@ class DPNormalMixture(object):
             alpha = self._update_alpha(stick_weights)
             mu, Sigma = self._update_mu_Sigma(Sigma, component_mask)
 
-            if i % 50 == 0:
-                #print i, counts
-                #print np.c_[mu, weights]
-		pass
+            ## relabel if needed:
+            if ident:
+                cost = c0.copy()
+                for i, j in zip(zref, zhat):
+                    cost[i, j] -= 1;
+                pdb.set_trace()
+                _, ii = np.where(munkres(cost))
 
-            '''
-                for j in xrange(self.ncomp):
-                    ax.plot(self.weights[:i, j])
-                plt.show()
-                plt.draw_if_interactive()
-            '''
-
-            if i < 0:
-                continue
-
-            self.stick_weights[i] = stick_weights
+                weights = weights[ii]
+                mu = mu[ii]
+                Sigma = Sigma[ii]
+                
             self.weights[i] = weights
             self.alpha[i] = alpha
             self.mu[i] = mu
@@ -215,7 +242,6 @@ class DPNormalMixture(object):
         self.mu = np.zeros((nresults, self.ncomp, self.ndim))
         self.Sigma = np.zeros((nresults, self.ncomp, self.ndim, self.ndim))
         self.alpha = np.zeros(nresults)
-        self.stick_weights = np.zeros((nresults, self.ncomp - 1))
 
     def _update_labels(self, mu, Sigma, weights):
         if self.gpu:
@@ -224,10 +250,12 @@ class DPNormalMixture(object):
             densities = gpustats.mvnpdf_multi(self.gdata, mu, Sigma, 
                                               weights=weights.flatten(), 
                                               get=False, logged=True, order='C')
+            self._densities = densities #keep this around
             return gpustats.sampler.sample_discrete(densities, logged=True)
             
         else:
             densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
+            self._densities = densities
             return sample_discrete(densities).squeeze()
 
     def _update_stick_weights(self, counts, alpha):
@@ -364,7 +392,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
             nmzero = np.sum(self.ll==0)
             self.ll = np.sum(np.log(self.ll[self.ll>0])) + nmzero*self._logmnflt
             
-            nrm = gpu_apply_row_max(densities)
+            nrm, _ = gpu_apply_row_max(densities)
             gpu_sweep_col_diff(densities, nrm)
             inplace_exp(densities)
             nrm = cuLA.dot(self.g_ones, tdens, "T")
@@ -599,9 +627,9 @@ if __name__ == '__main__':
 
     import pdb
     mcmc = DPNormalMixture(data, ncomp=4, gpu=True)
-    mcmc.sample(100,nburn=100)
+    mcmc.sample(100,nburn=100, ident=True)
     pdb.set_trace()
-    bem = BEM_DPNormalMixture(mcmc, ncomp=4, gpu=True)
+    bem = BEM_DPNormalMixture(mcmc, ncomp=4, gpu=False)
     bem.optimize(maxiter=200)
     pdb.set_trace()
     #print model.stick_weights

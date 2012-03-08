@@ -219,6 +219,7 @@ def gpu_apply_row_max(X):
     dims = np.asarray(X.shape, dtype=np.int32)
 
     gy = to_gpu(np.zeros(dims[0], dtype=np.float32))
+    giy = to_gpu(np.zeros(dims[0], dtype=np.int32))
 
     if devinfo.max_block_threads >= 1024:
         blocksize = 32
@@ -233,10 +234,10 @@ def gpu_apply_row_max(X):
     else:
         func = CUDA_Kernels.get_function("apply_rows_max_cm")
 
-    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
+    func(gX, gy, giy, dims[0], dims[1], block=(blocksize, blocksize,1),
          grid = (gridsize,1), shared = shared)
 
-    return gy
+    return gy, giy
 
 
 
