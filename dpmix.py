@@ -41,7 +41,6 @@ except ImportError:
     _has_gpu = False
 
 import pylab
-import pdb
 
 class DPNormalMixture(object):
     """
@@ -213,14 +212,14 @@ class DPNormalMixture(object):
             ## relabel if needed:
             if ident:
                 cost = c0.copy()
-                for i, j in zip(zref, zhat):
-                    cost[i, j] -= 1;
-                pdb.set_trace()
-                _, ii = np.where(munkres(cost))
+                for ii, jj in zip(zref, zhat):
+                    cost[ii, jj] -= 1;
 
-                weights = weights[ii]
-                mu = mu[ii]
-                Sigma = Sigma[ii]
+                _, iii = np.where(munkres(cost))
+
+                weights = weights[iii]
+                mu = mu[iii]
+                Sigma = Sigma[iii]
                 
             self.weights[i] = weights
             self.alpha[i] = alpha
@@ -625,17 +624,20 @@ if __name__ == '__main__':
     #data = data - data.mean(0)
     #data = data/data.std(0)
 
-    import pdb
-    mcmc = DPNormalMixture(data, ncomp=4, gpu=True)
-    mcmc.sample(100,nburn=100, ident=True)
-    pdb.set_trace()
+    #import pdb
+    mcmc = DPNormalMixture(data, ncomp=4, gpu=False)
+    mcmc.sample(100,nburn=100)
+    #pdb.set_trace()
     bem = BEM_DPNormalMixture(mcmc, ncomp=4, gpu=False)
     bem.optimize(maxiter=200)
-    pdb.set_trace()
-    #print model.stick_weights
-    #mu = model.mu
-    #print model.weights[-1]
-    #pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
-    #pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
-    #pylab.show()
+    #pdb.set_trace()
+    ident_mcmc = DPNormalMixture(bem, ncomp=4, gpu=False)
+    ident_mcmc.sample(100,nburn=0, ident=True)
+    #pdb.set_trace()
+    print ident_mcmc.stick_weights
+    mu = ident_mcmc.mu
+    print ident_mcmc.weights[-1]
+    pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
+    pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
+    pylab.show()
 
