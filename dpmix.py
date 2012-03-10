@@ -14,10 +14,19 @@ import numpy.random as npr
 
 import pymc as pm
 
+import cython
+
 try:
     from munkres import munkres
 except ImportError:
     _has_munkres = False
+
+@cython.compile
+def _get_cost(x,y,C):
+    n = len(x)
+    for i in range(n):
+        C[x[i], y[i]] -= 1 
+
 
 # check for gpustats compatability
 try:
@@ -212,8 +221,7 @@ class DPNormalMixture(object):
             ## relabel if needed:
             if ident:
                 cost = c0.copy()
-                for ii, jj in zip(zref, zhat):
-                    cost[ii, jj] -= 1;
+                _get_cost(zref, zhat, cost) #cython!!
 
                 _, iii = np.where(munkres(cost))
 
@@ -625,6 +633,7 @@ if __name__ == '__main__':
     #data = data/data.std(0)
 
     #import pdb
+    #pdb.set_trace()
     mcmc = DPNormalMixture(data, ncomp=4, gpu=False)
     mcmc.sample(100,nburn=100)
     #pdb.set_trace()
