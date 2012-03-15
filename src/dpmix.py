@@ -6,11 +6,6 @@ Ishwaran & James (2001) Gibbs Sampling Methods for Stick-Breaking Priors
 """
 from __future__ import division
 
-import matplotlib.pyplot as plt
-
-import scipy.stats as stats
-import scipy.linalg as LA
-
 import numpy as np
 import numpy.random as npr
 
