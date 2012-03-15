@@ -4,6 +4,9 @@ Created on Mar 15, 2012
 @author: Andrew Cron
 @author: Jacob Frelinger
 '''
+import sys
+sys.path.append('../src')
+
 import numpy as np
 import numpy.random as npr
 import pymc as pm
@@ -13,9 +16,7 @@ from BEM import BEM_DPNormalMixture
 
 import pylab
 
-import sys
 
-sys.path.append('../src')
 #-------------------------------------------------------------------------------
 # Generate MV normal mixture
 
