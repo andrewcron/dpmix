@@ -145,7 +145,7 @@ class DPNormalMixture(object):
             Phi0[:] = np.eye(self.ndim) * nu0
 
         if Sigma0 is None:
-            # draw from prior .. bad idea for vague prior ...
+            # draw from prior .. bad idea for vague prior ??? 
             Sigma0 = np.empty((self.ncomp, self.ndim, self.ndim))
             for j in xrange(self.ncomp):
                 Sigma0[j] = pm.rinverse_wishart(nu0 + 1 + self.ndim, Phi0[j])
@@ -155,8 +155,10 @@ class DPNormalMixture(object):
         if mu0 is None:
             mu0 = np.empty((self.ncomp, self.ndim))
             for j in xrange(self.ncomp):
-                mu0[j] = pm.rmv_normal_cov(self.data.mean(0),
-                                           np.cov(self.data.T))
+                #mu0[j] = pm.rmv_normal_cov(self.data.mean(0),
+                #                           np.cov(self.data.T))
+                mu0[j] = pm.rmv_normal_cov(np.zeros((self.ndim)),
+                                           self.gamma[j]*Sigma0[j])
 
         if weights0 is None:
             weights0 = (1/self.ncomp)*np.ones((self.ncomp, 1))

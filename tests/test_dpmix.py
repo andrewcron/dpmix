@@ -80,22 +80,23 @@ if __name__ == '__main__':
     ncomps = 3 # n mixture components
     npr.seed(datetime.now().microsecond)
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
-    #data = data - data.mean(0)
-    #data = data/data.std(0)
+    data = data - data.mean(0)
+    data = data/data.std(0)
 
     #import pdb
     #pdb.set_trace()
-    mcmc = DPNormalMixture(data, ncomp=4, gpu=False)
-    mcmc.sample(100,nburn=100)
+    mcmc = DPNormalMixture(data, ncomp=3, gpu=False)#, mu0=mu0)
+    mcmc.sample(100,nburn=0)
     #pdb.set_trace()
-    bem = BEM_DPNormalMixture(mcmc, ncomp=4, gpu=False)
+    bem = BEM_DPNormalMixture(mcmc, gpu=False)
     bem.optimize(maxiter=200)
     #pdb.set_trace()
-    ident_mcmc = DPNormalMixture(bem, ncomp=4, gpu=False)
-    ident_mcmc.sample(100,nburn=0, ident=True)
+    ident_mcmc = DPNormalMixture(bem, gpu=False)
+    ident_mcmc.sample(100,nburn=0, ident=False)
     #pdb.set_trace()
     print ident_mcmc.stick_weights
     mu = ident_mcmc.mu
+    print mu[-1]
     print ident_mcmc.weights[-1]
     pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
     pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')

@@ -20,8 +20,9 @@ def mvn_weighted_logged(data, means, covs, weights):
     const = 0.5 * p * np.log(2*np.pi)
 
     for i in range(k):
-        diff = np.dot(data - means[i,:], LA.inv(LA.cholesky(covs[i,:,:])))
-        densities[:,i] = np.log(weights[i]) - const - 0.5*(diff**2).sum(1)
+        chol = LA.cholesky(covs[i,:,:])
+        diff = np.dot(data - means[i,:], LA.inv(chol))
+        densities[:,i] = np.log(weights[i]) - const - np.diag(chol).sum() - 0.5*(diff**2).sum(1)
 
     return densities
     
