@@ -4,16 +4,16 @@ Created on Mar 15, 2012
 @author: Andrew Cron
 @author: Jacob Frelinger
 '''
-import sys
-sys.path.append('../src')
+#import sys
+#sys.path.append('../src')
 
 import numpy as np
 import numpy.random as npr
 import pymc as pm
-
-from dpmix import DPNormalMixture
-from BEM import BEM_DPNormalMixture
-
+#
+#from dpmix import DPNormalMixture
+#from BEM import BEM_DPNormalMixture
+from dpmix import DPNormalMixture, BEM_DPNormalMixture
 import pylab
 
 
@@ -90,6 +90,7 @@ if __name__ == '__main__':
     #pdb.set_trace()
     bem = BEM_DPNormalMixture(mcmc, gpu=False)
     bem.optimize(maxiter=200)
+    print bem.mu
     #pdb.set_trace()
     ident_mcmc = DPNormalMixture(bem, gpu=False)
     ident_mcmc.sample(100,nburn=0, ident=False)
@@ -100,4 +101,8 @@ if __name__ == '__main__':
     print ident_mcmc.weights[-1]
     pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
     pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
+    mu = bem.mu
+    pylab.scatter(mu[:,0],mu[:,1], c='g')
+#    mu = mcmc.mu
+#    pylab.scatter(mu[:,:,0],mu[:,:,1], c='cyan')
     pylab.show()
