@@ -75,6 +75,13 @@ def plot_2d_mixture(data, labels):
 
 if __name__ == '__main__':
     from datetime import datetime
+    from optparse import OptionParser
+
+    parser = OptionParser()
+    parser.add_option("--gpu", default=False)
+    (options, args) = parser.parse_args()
+    use_gpu = bool(options.gpu)
+
     N = int(1e4) # n data points per component
     K = 2 # ndim
     ncomps = 3 # n mixture components
@@ -85,14 +92,14 @@ if __name__ == '__main__':
 
     #import pdb
     #pdb.set_trace()
-    mcmc = DPNormalMixture(data, ncomp=3, gpu=False)#, mu0=mu0)
+    mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu)#, mu0=mu0)
     mcmc.sample(100,nburn=0)
     #pdb.set_trace()
-    bem = BEM_DPNormalMixture(mcmc, gpu=False)
+    bem = BEM_DPNormalMixture(mcmc)
     bem.optimize(maxiter=200)
     #pdb.set_trace()
-    ident_mcmc = DPNormalMixture(bem, gpu=False)
-    ident_mcmc.sample(100,nburn=0, ident=False)
+    ident_mcmc = DPNormalMixture(bem)
+    ident_mcmc.sample(100, nburn=0, ident=False)
     #pdb.set_trace()
     print ident_mcmc.stick_weights
     mu = ident_mcmc.mu
