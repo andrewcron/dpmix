@@ -110,7 +110,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
             self.ll = cuLA.dot(self.g_ones, cumath.exp(tdens), "T").get()
             nmzero = np.sum(self.ll==0)
             self.ll = np.sum(np.log(self.ll[self.ll>0])) + nmzero*self._logmnflt
-            
+
             nrm, _ = gpu_apply_row_max(densities)
             gpu_sweep_col_diff(densities, nrm)
             inplace_exp(densities)

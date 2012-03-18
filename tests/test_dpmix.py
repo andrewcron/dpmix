@@ -80,7 +80,7 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option("--gpu", default=False)
     (options, args) = parser.parse_args()
-    use_gpu = bool(options.gpu)
+    use_gpu = bool(int(options.gpu))
 
     N = int(1e4) # n data points per component
     K = 2 # ndim
