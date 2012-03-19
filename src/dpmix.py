@@ -37,7 +37,7 @@ try:
         from pycuda.gpuarray import to_gpu
         from pycuda import cumath
         from pycuda.elementwise import ElementwiseKernel
-        from scikits.cuda import linalg as cuLA
+        from scikits.cuda import linalg as cuLA; cuLA.init()
         from cuda_functions import *
         inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
         inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")

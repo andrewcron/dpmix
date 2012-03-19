@@ -20,7 +20,7 @@ try:
         from pycuda.gpuarray import to_gpu
         from pycuda import cumath
         from pycuda.elementwise import ElementwiseKernel
-        from scikits.cuda import linalg as cuLA
+        from scikits.cuda import linalg as cuLA; cuLA.init()
         from cuda_functions import *
         inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
         inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
@@ -107,6 +107,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
                                               get=False, logged=True)
 
             tdens = densities.reshape(self.ncomp, self.nobs, "C")
+            #import pdb; pdb.set_trace()
             self.ll = cuLA.dot(self.g_ones, cumath.exp(tdens), "T").get()
             nmzero = np.sum(self.ll==0)
             self.ll = np.sum(np.log(self.ll[self.ll>0])) + nmzero*self._logmnflt
