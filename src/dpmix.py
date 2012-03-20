@@ -77,7 +77,7 @@ class DPNormalMixture(object):
     def __init__(self, data, ncomp=256, gamma0=10, m0=None,
                  nu0=None, Phi0=None, e0=1, f0=1,
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
-                 gpu=None):
+                 gpu=None, verbose=False):
         if issubclass(type(data), DPNormalMixture):
             self.data = data.data
             self.nobs, self.ndim = self.data.shape
@@ -132,6 +132,9 @@ class DPNormalMixture(object):
                 self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
                 self.g_ones_long = to_gpu(np.ones((self.nobs,1), dtype=np.float32))
                 
+        #verbosity
+        self.verbose = verbose
+        
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, e0, f0)
 
@@ -191,8 +194,17 @@ class DPNormalMixture(object):
         mu = self._mu0
         Sigma = self._Sigma0
 
+        if self.verbose:
+            if self.gpu:
+                print "starting GPU enabled MCMC"
+            else:
+                print "starting MCMC"
 
         for i in range(-nburn, niter):
+            if isinstance(self.verbose, int) and self.verbose:
+                if i % self.verbose == 0:
+                    print i
+            
             labels = self._update_labels(mu, Sigma, weights)
 
             ## gets reference and iteration classifiers ... 
