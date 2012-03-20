@@ -89,7 +89,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
         while np.abs(ll_1 - ll_2) > 0.01*perdiff and it < maxiter:
             if isinstance(self.verbose, int) and self.verbose:
                 if it % self.verbose == 0:
-                    print print "%d:, %f" % (it, ll_2)
+                    print "%d:, %f" % (it, ll_2)
             it += 1
 
             self.maximize_mu()
