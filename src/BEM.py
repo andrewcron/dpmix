@@ -87,7 +87,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
             else:
                 print "starting BEM"
         while np.abs(ll_1 - ll_2) > 0.01*perdiff and it < maxiter:
-            if isinstance(self.verbose, int) and self.verbose:
+            if isinstance(self.verbose, int) and self.verbose and not isinstance(self.verbose, bool):
                 if it % self.verbose == 0:
                     print "%d:, %f" % (it, ll_2)
             it += 1
