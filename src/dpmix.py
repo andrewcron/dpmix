@@ -11,7 +11,7 @@ import numpy.random as npr
 
 import pymc as pm
 
-from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc
+from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, _get_cost
 
 import cython
 
@@ -19,13 +19,6 @@ try:
     from munkres import munkres
 except ImportError:
     _has_munkres = False
-
-@cython.compile
-def _get_cost(x,y,C):
-    n = len(x)
-    for i in range(n):
-        C[x[i], y[i]] -= 1 
-
 
 # check for gpustats compatability
 try:

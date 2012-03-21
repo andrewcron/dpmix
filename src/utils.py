@@ -11,7 +11,11 @@ import scipy.stats as stats
 
 import cython
 
-
+@cython.compile
+def _get_cost(x,y,C):
+    n = len(x)
+    for i in range(n):
+        C[x[i], y[i]] -= 1 
 
 def mvn_weighted_logged(data, means, covs, weights):
     n, p = data.shape
@@ -55,7 +59,6 @@ def sample_discrete(densities, logged=True):
 
     return labels
     
-
 def stick_break_proc(beta_a, beta_b, size=None):
     """
     Kernel stick breaking procedure for truncated Dirichlet Process
@@ -101,3 +104,16 @@ def stick_break_proc(beta_a, beta_b, size=None):
 
 def _get_mask(labels, ncomp):
     return np.equal.outer(np.arange(ncomp), labels)
+
+# stick breaking func
+@cython.compile
+def break_sticks(V):
+    n = len(V)
+    pi = np.empty(n+1)
+    pi[0] = V[0]
+    prod = (1-V[0])
+    for k in xrange(1, n):
+        pi[k] = prod * V[k]
+        prod *= 1 - V[k]
+    pi[-1] = prod
+    return pi

@@ -4,8 +4,8 @@ Created on Mar 15, 2012
 @author: Andrew Cron
 @author: Jacob Frelinger
 '''
-#import sys
-#sys.path.append('../src')
+import sys
+sys.path.append('../src')
 
 import numpy as np
 import numpy.random as npr
