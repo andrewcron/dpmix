@@ -86,6 +86,12 @@ def stick_break_proc(beta_a, beta_b, size=None):
 
     dist = stats.beta(beta_a, beta_b)
     V = stick_weights = dist.rvs(size)
+    #check for bad values and deal with adhoc
+    V[V<1e-10] = 1e-10; V[V>(1-1e-10)] = 1-1e-10
+    nanmask = np.isnan(V)
+    if len(nanmask)>0:
+        V[nanmask] = beta_a / (beta_a + beta_b)
+        
     pi = mixture_weights = np.empty(len(V) + 1)
 
     pi[0] = V[0]
@@ -106,7 +112,7 @@ def _get_mask(labels, ncomp):
     return np.equal.outer(np.arange(ncomp), labels)
 
 # stick breaking func
-@cython.compile
+#@cython.compile
 def break_sticks(V):
     n = len(V)
     pi = np.empty(n+1)

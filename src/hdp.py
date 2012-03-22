@@ -12,7 +12,7 @@ from dpmix import DPNormalMixture
 
 import cython
 
-import pdb
+#import pdb
 
 try:
     from munkres import munkres
@@ -41,7 +41,7 @@ except ImportError:
     _has_gpu = False
 
 # func to get lpost for beta
-@cython.compile
+#@cython.compile
 def beta_post(stick_beta, beta, stick_weights, alpha0, alpha):
     J = stick_weights.shape[0]
     k = stick_weights.shape[1]
@@ -115,6 +115,7 @@ class HDPNormalMixture(DPNormalMixture):
         self._beta0 = break_sticks(self._stick_beta0)
         self.e0, self.f0 = f0, g0
         self.prop_scale = 0.05 * np.ones(self.ncomp)
+        self.prop_scale[-1] = 1.
         self.AR = np.zeros(self.ncomp)
         
 
@@ -142,15 +143,15 @@ class HDPNormalMixture(DPNormalMixture):
             component_mask = [ _get_mask(l, self.ncomp) for l in labels ]
             counts = [ mask.sum(1) for mask in component_mask ]
             stick_weights, weights = self._update_stick_weights(counts, beta, alpha0)
-            try:
-                stick_beta, beta = self._update_beta(stick_beta, beta, stick_weights, alpha0, alpha)
-            except:
-                pdb.set_trace()
+            stick_beta, beta = self._update_beta(stick_beta, beta, stick_weights, alpha0, alpha)
 
             alpha = self._update_alpha(stick_beta)
             alpha0 = self._update_alpha0(stick_weights, beta, alpha0)
 
             mu, Sigma = self._update_mu_Sigma(mu, component_mask)
+
+            if i%100==0:
+                print i
 
             if ident:
                 cost = c0.copy()
@@ -228,11 +229,11 @@ class HDPNormalMixture(DPNormalMixture):
             
             # sample new beta from reflected normal
             prop = stats.norm.rvs(stick_beta[k], self.prop_scale[k])
-            while prop > 1 or prop < 0:
-                if prop > 1:
-                    prop = 2 - prop
+            while prop > (1-1e-9) or prop < 1e-9:
+                if prop > 1-1e-9:
+                    prop = 2*(1-1e-9) - prop
                 else:
-                    prop = - prop
+                    prop = 2*1e-9 - prop
             stick_beta[k] = prop
             beta = break_sticks(stick_beta)
 
