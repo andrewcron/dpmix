@@ -86,6 +86,9 @@ class HDPNormalMixture(DPNormalMixture):
         self.ngroups = len(self.data)
         self.ndim = self.data[0].shape[1]
         self.nobs = tuple([d.shape[0] for d in self.data])
+        # need for ident code
+        self.cumobs = np.zeros(self.ngroups+1); 
+        self.cumobs[1:] = np.asarray(self.nobs).cumsum()
         self.ncomp = ncomp
 
         if m0 is not None:
@@ -116,6 +119,7 @@ class HDPNormalMixture(DPNormalMixture):
         
 
     def sample(self, niter=1000, nburn=0, thin=1, tune_interval=100, ident=False):
+        self._ident = ident
         self._setup_storage(niter, thin)
         self._tune_interval = tune_interval
 
@@ -128,7 +132,13 @@ class HDPNormalMixture(DPNormalMixture):
         Sigma = self._Sigma0
 
         for i in range(-nburn, niter):
-            labels = self._update_labels(mu, Sigma, weights)
+            labels, zhat = self._update_labels(mu, Sigma, weights)
+            if i==-nburn and ident:
+                zref = zhat.copy()
+                c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
+                for j in xrange(self.ncomp):
+                    c0[j,:] = np.sum(zref==j)
+
             component_mask = [ _get_mask(l, self.ncomp) for l in labels ]
             counts = [ mask.sum(1) for mask in component_mask ]
             stick_weights, weights = self._update_stick_weights(counts, beta, alpha0)
@@ -141,6 +151,15 @@ class HDPNormalMixture(DPNormalMixture):
             alpha0 = self._update_alpha0(stick_weights, beta, alpha0)
 
             mu, Sigma = self._update_mu_Sigma(mu, component_mask)
+
+            if ident:
+                cost = c0.copy()
+                _get_cost(zref, zhat, cost)
+                _, iii = np.where(munkres(cost))
+                beta = beta[iii]
+                weights = weights[:,iii]
+                mu = mu[iii]
+                Sigma = Sigma[iii]
 
             if i>=0:
                 self.beta[i] = beta
@@ -166,17 +185,26 @@ class HDPNormalMixture(DPNormalMixture):
     def _update_labels(self, mu, Sigma, weights):
         # gets the latent classifications .. 
         labels = [np.zeros(self.nobs[j]) for j in range(self.ngroups)]
+        if self._ident:
+            zhat = np.zeros(sum(self.nobs), dtype=np.int); 
+        else:
+            zhat = None
         if self.gpu:
             for j in xrange(self.ngroups):
                 densities = gpustats.mvnpdf_multi(self.gdata[j], mu, Sigma,
                                                   weights=weights[j].flatten(),
                                                   get=False, logged=True, order='C')
+                if self._ident:
+                    zhat[self.cumobs[j]:self.cumobs[j+1]] = gpu_apply_row_max(densities)[1].get()
                 labels[j] = gpustats.sampler.sample_discrete(densities, logged=True)
         else:
             for j in xrange(self.ngroups):
                 densities = mvn_weighted_logged(self.data[j], mu, Sigma, weights[j])
                 labels[j] = sample_discrete(densities).squeeze()
-        return labels
+                if self._ident:
+                    zhat[self.cumobs[j]:self.cumobs[j+1]] = densities.argmax(1)
+                
+        return labels, zhat
 
     def _update_stick_weights(self, counts, beta, alpha0):
         new_weights = np.zeros((self.ngroups, self.ncomp))

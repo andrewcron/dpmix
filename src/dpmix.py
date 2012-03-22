@@ -200,7 +200,7 @@ class DPNormalMixture(object):
                 zhat = zref.copy()
             elif ident:
                 if self.gpu:
-                    zhet = gpu_apply_row_max(self._densities)[1].get()
+                    zhat = gpu_apply_row_max(self._densities)[1].get()
                 else:
                     zhat = self._densities.argmax(1)
 
