@@ -72,50 +72,77 @@ class HDPNormalMixture(DPNormalMixture):
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
                  gpu=None):
 
-        # check for functioning gpu
-        if _has_gpu:
-            if gpu is not None:
-                self.gpu = gpu
+        if not issubclass(type(data), HDPNormalMixture):
+            # check for functioning gpu
+            if _has_gpu:
+                if gpu is not None:
+                    self.gpu = gpu
+                else:
+                    self.gpu = _has_gpu
             else:
-                self.gpu = _has_gpu
-        else:
-            self.gpu = False
+                self.gpu = False
             
-        # get the data .. should add checks here later
-        self.data = [np.asarray(d) for d in data]
-        self.ngroups = len(self.data)
-        self.ndim = self.data[0].shape[1]
-        self.nobs = tuple([d.shape[0] for d in self.data])
-        # need for ident code
-        self.cumobs = np.zeros(self.ngroups+1); 
-        self.cumobs[1:] = np.asarray(self.nobs).cumsum()
-        self.ncomp = ncomp
+            # get the data .. should add checks here later
+            self.data = [np.asarray(d) for d in data]
+            self.ngroups = len(self.data)
+            self.ndim = self.data[0].shape[1]
+            self.nobs = tuple([d.shape[0] for d in self.data])
+            # need for ident code
+            self.cumobs = np.zeros(self.ngroups+1); 
+            self.cumobs[1:] = np.asarray(self.nobs).cumsum()
+            self.ncomp = ncomp
 
-        if m0 is not None:
-            if len(m0)==self.ndim:
-                self.mu_prior_mean = m0.copy()
-            elif len(m0)==1:
-                self.mu_prior_mean = m0*np.ones(self.ndim)
+            if m0 is not None:
+                if len(m0)==self.ndim:
+                    self.mu_prior_mean = m0.copy()
+                elif len(m0)==1:
+                    self.mu_prior_mean = m0*np.ones(self.ndim)
+            else:
+                self.mu_prior_mean = np.zeros(self.ndim)
+
+                self.gamma = gamma0*np.ones(ncomp)
+        
+            # set gpu working vars
+            if self.gpu:
+                self.gdata = [to_gpu(np.asarray(dat, dtype=np.float32)) for dat in self.data]
+
+            
+            self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
+                                     weights0, e0, f0)
+            # initialize hdp specific vars
+            self._weights0 = np.zeros((self.ngroups, self.ncomp), dtype=np.float)
+            self._weights0.fill(1/self.ncomp)
+            self._stick_beta0 = stats.beta.rvs(1,self._alpha0, size=self.ncomp-1)
+            self._beta0 = break_sticks(self._stick_beta0)
+            self._alpha00 = 1.0
+            self.e0, self.f0 = f0, g0
+            self.prop_scale = 0.05 * np.ones(self.ncomp)
+            self.prop_scale[-1] = 1.
+
         else:
-            self.mu_prior_mean = np.zeros(self.ndim)
-
-        self.gamma = gamma0*np.ones(ncomp)
-                        
-        # set gpu working vars
-        if self.gpu:
-            self.gdata = [to_gpu(np.asarray(dat, dtype=np.float32)) for dat in self.data]
-
-                
-        self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
-                                 weights0, e0, f0)
-        # initialize hdp specific vars
-        self._weights0 = np.zeros((self.ngroups, self.ncomp), dtype=np.float)
-        self._weights0.fill(1/self.ncomp)
-        self._stick_beta0 = stats.beta.rvs(1,self._alpha0, size=self.ncomp-1)
-        self._beta0 = break_sticks(self._stick_beta0)
-        self.e0, self.f0 = f0, g0
-        self.prop_scale = 0.05 * np.ones(self.ncomp)
-        self.prop_scale[-1] = 1.
+            # get all important vars from input class
+            self.data = data.data
+            self.ngroups, self.nobs, self.ndim, self.ncomp = data.ngroups, data.nobs, data.ndim, data.ncomp
+            self.cumobs = data.cumobs.copy()
+            self._weights0 = data.weights[-1].copy()
+            self._stick_beta0 = data.stick_beta.copy()
+            self._beta0 = break_sticks(self._stick_beta0)
+            self.e0, self.f0 = data.e0, data.f0
+            self.e, self.f = data.e, data.f
+            self._nu0 = data._nu0
+            self._Phi0 = data._Phi0
+            self.mu_prior_mean = data.mu_prior_mean.copy()
+            self.gamma = data.gamma.copy()
+            self._alpha0 = data.alpha[-1].copy()
+            self._alpha00 = data.alpha0[-1].copy()
+            self._weights0 = data.weights[-1].copy()
+            self._mu0 = data.mu[-1].copy()
+            self._Sigma0 = data.Sigma[-1].copy()
+            self.prop_scale = data.prop_scale.copy()
+            self.gpu = data.gpu
+            if self.gpu:
+                self.gdata = data.gdata
+        
         self.AR = np.zeros(self.ncomp)
         
 
@@ -125,7 +152,7 @@ class HDPNormalMixture(DPNormalMixture):
         self._tune_interval = tune_interval
 
         alpha = self._alpha0
-        alpha0 = 1.0
+        alpha0 = self._alpha00
         weights = self._weights0
         beta = self._beta0
         stick_beta = self._stick_beta0
@@ -171,7 +198,7 @@ class HDPNormalMixture(DPNormalMixture):
                 self.Sigma[i] = Sigma
             elif (nburn+i+1)%self._tune_interval == 0:
                 self._tune()
-
+        self.stick_beta = stick_beta.copy()
             
 
     def _setup_storage(self, niter=1000, thin=1):

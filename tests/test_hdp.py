@@ -27,9 +27,13 @@ if __name__ == '__main__':
     ind = np.arange(N); np.random.shuffle(ind);
     all_data = data[ind].copy()
     data = [ all_data[(N/J*i):(N/J*(i+1))].copy() for i in range(J) ]
-    mcmc = HDPNormalMixture(data, ncomp=3, gpu=False)
-    mcmc.sample(2000, nburn=1000, tune_interval=100)
+    mcmc = HDPNormalMixture(data, ncomp=3, gpu=True)
+    mcmc.sample(200, nburn=500, tune_interval=100)
+    imcmc = HDPNormalMixture(mcmc)
+    imcmc.sample(200, ident=True)
     import pdb
     pdb.set_trace()
+
+
     
 
