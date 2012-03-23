@@ -62,12 +62,12 @@ class BEM_DPNormalMixture(DPNormalMixture):
     def __init__(self, data, ncomp=256, gamma0=100, m0=None,
                  nu0=None, Phi0=None, e0=1, f0=1,
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
-                 gpu=None):
+                 gpu=None, verbose=False):
 
         ## for now, initialization is exactly the same .... 
         super(BEM_DPNormalMixture, self).__init__(
             data, ncomp, gamma0, m0, nu0, Phi0, e0, f0,
-            mu0, Sigma0, weights0, alpha0, gpu)
+            mu0, Sigma0, weights0, alpha0, gpu, verbose)
         self.alpha = self._alpha0
         self.weights = self._weights0.copy()
         self.stick_weights = self.weights.copy()
@@ -81,10 +81,17 @@ class BEM_DPNormalMixture(DPNormalMixture):
         ll_2 = self.log_posterior()
         ll_1 = 1
         it = 0
+        if self.verbose:
+            if self.gpu:
+                print "starting GPU enabled BEM"
+            else:
+                print "starting BEM"
         while np.abs(ll_1 - ll_2) > 0.01*perdiff and it < maxiter:
+            if isinstance(self.verbose, int) and self.verbose and not isinstance(self.verbose, bool):
+                if it % self.verbose == 0:
+                    print "%d:, %f" % (it, ll_2)
             it += 1
-            print it
-            print ll_2
+
             self.maximize_mu()
             self.maximize_Sigma()
             self.maximize_weights()

@@ -79,8 +79,10 @@ if __name__ == '__main__':
 
     parser = OptionParser()
     parser.add_option("--gpu", default=False)
+    parser.add_option("--verbose", default=False)
     (options, args) = parser.parse_args()
     use_gpu = bool(int(options.gpu))
+    verbosity = int(options.verbose)
 
     N = int(1e4) # n data points per component
     K = 2 # ndim
@@ -92,14 +94,14 @@ if __name__ == '__main__':
 
     #import pdb
     #pdb.set_trace()
-    mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu)#, mu0=mu0)
+    mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity)#, mu0=mu0)
     mcmc.sample(100,nburn=0)
     #pdb.set_trace()
-    bem = BEM_DPNormalMixture(mcmc)
+    bem = BEM_DPNormalMixture(mcmc, verbose=verbosity)
     bem.optimize(maxiter=200)
     print bem.mu
     #pdb.set_trace()
-    ident_mcmc = DPNormalMixture(bem)
+    ident_mcmc = DPNormalMixture(bem, verbose=verbosity)
     ident_mcmc.sample(100, nburn=0, ident=False)
     #pdb.set_trace()
     print ident_mcmc.stick_weights
