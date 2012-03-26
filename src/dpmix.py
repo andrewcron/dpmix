@@ -194,7 +194,8 @@ class DPNormalMixture(object):
                 print "starting MCMC"
 
         for i in range(-nburn, niter):
-            if isinstance(self.verbose, int) and self.verbose and not isinstance(self.verbose, bool):
+            if isinstance(self.verbose, int) and self.verbose and \
+                    not isinstance(self.verbose, bool):
                 if i % self.verbose == 0:
                     print i
             

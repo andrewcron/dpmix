@@ -70,7 +70,7 @@ class HDPNormalMixture(DPNormalMixture):
     def __init__(self, data, ncomp=256, gamma0=10, m0=None,
                  nu0=None, Phi0=None, e0=1, f0=1, g0=1, h0=1, 
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
-                 gpu=None):
+                 gpu=None, verbose=False):
 
         if not issubclass(type(data), HDPNormalMixture):
             # check for functioning gpu
@@ -144,9 +144,17 @@ class HDPNormalMixture(DPNormalMixture):
                 self.gdata = data.gdata
         
         self.AR = np.zeros(self.ncomp)
+        # verbosity
+        self.verbose = verbose
         
 
     def sample(self, niter=1000, nburn=0, thin=1, tune_interval=100, ident=False):
+        if self.verbose:
+            if self.gpu:
+                print "starting GPU enabled MCMC"
+            else:
+                print "starting MCMC"
+
         self._ident = ident
         self._setup_storage(niter, thin)
         self._tune_interval = tune_interval
@@ -160,6 +168,11 @@ class HDPNormalMixture(DPNormalMixture):
         Sigma = self._Sigma0
 
         for i in range(-nburn, niter):
+            if isinstance(self.verbose, int) and self.verbose and \
+                    not isinstance(self.verbose, bool):
+                if i % self.verbose == 0:
+                    print i
+
             labels, zhat = self._update_labels(mu, Sigma, weights)
             if i==-nburn and ident:
                 zref = zhat.copy()
@@ -176,9 +189,6 @@ class HDPNormalMixture(DPNormalMixture):
             alpha0 = self._update_alpha0(stick_weights, beta, alpha0)
 
             mu, Sigma = self._update_mu_Sigma(mu, component_mask)
-
-            if i%100==0:
-                print i
 
             if ident:
                 cost = c0.copy()
