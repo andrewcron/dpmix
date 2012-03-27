@@ -12,7 +12,7 @@ Requirements
 * NumPy
 * SciPy
 * Cython
-* PyCUDA (andrewcron fork)
+* PyCUDA
 * scikits.cuda
 * gpustats
 
