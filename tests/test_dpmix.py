@@ -104,7 +104,7 @@ if __name__ == '__main__':
     ident_mcmc = DPNormalMixture(bem, verbose=verbosity)
     ident_mcmc.sample(100, nburn=0, ident=False)
     #pdb.set_trace()
-    print ident_mcmc.stick_weights
+    print ident_mcmc.weights[-1]
     mu = ident_mcmc.mu
     print mu[-1]
     print ident_mcmc.weights[-1]

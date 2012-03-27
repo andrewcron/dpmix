@@ -17,6 +17,7 @@ try:
         import gpustats
         import gpustats.sampler
         import pycuda.gpuarray as gpuarray
+        from gpustats.util import GPUarray_reshape, GPUarray_order
         from pycuda.gpuarray import to_gpu
         from pycuda import cumath
         from pycuda.elementwise import ElementwiseKernel
@@ -99,7 +100,6 @@ class BEM_DPNormalMixture(DPNormalMixture):
             self.expected_labels()
             ll_1 = ll_2
             ll_2 = self.log_posterior()
-        print ll_2
             
         
     def log_posterior(self):
@@ -112,8 +112,8 @@ class BEM_DPNormalMixture(DPNormalMixture):
             densities = gpustats.mvnpdf_multi(self.gdata, self.mu, self.Sigma, 
                                               weights=self.weights.flatten(), 
                                               get=False, logged=True)
-
-            tdens = densities.reshape(self.ncomp, self.nobs, "C")
+            tdens = GPUarray_reshape(densities, (self.ncomp, self.nobs), "C")
+            #tdens = densities.reshape(self.ncomp, self.nobs, "C")
             #import pdb; pdb.set_trace()
             self.ll = cuLA.dot(self.g_ones, cumath.exp(tdens), "T").get()
             nmzero = np.sum(self.ll==0)
@@ -121,7 +121,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
             nrm, _ = gpu_apply_row_max(densities)
             gpu_sweep_col_diff(densities, nrm)
-            inplace_exp(densities)
+            GPUarray_order(inplace_exp(densities), "F")
             nrm = cuLA.dot(self.g_ones, tdens, "T")
             gpu_sweep_col_div(densities, nrm)
 
@@ -153,8 +153,9 @@ class BEM_DPNormalMixture(DPNormalMixture):
     def maximize_Sigma(self):
         df = self.ct + self._nu0 + 2*self.ndim + 3
         if self.gpu:
-            inplace_sqrt(self.densities)
-            fltdens = self.densities.ravel()
+            GPUarray_order(inplace_sqrt(self.densities), "F")
+            #fltdens = self.densities.ravel()
+            fltdens = GPUarray_reshape(self.densities, self.densities.size)
             self.xbar = (self.xbar.T / self.ct).T
             for j in xrange(self.ncomp):
                 if self.ct[j]>0.1:
