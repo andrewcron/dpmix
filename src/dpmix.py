@@ -55,12 +55,23 @@ class DPNormalMixture(object):
     Notes
     -----
     y ~ \sum_{j=1}^J \pi_j {\cal N}(\mu_j, \Sigma_j)
+    \pi ~ stickbreak(\alpha)
     \alpha ~ Ga(e, f)
+    \mu_j ~ N(0, m\Sigma_j)
     \Sigma_j ~ IW(nu0 + 2, nu0 * \Phi_j)
+
+    The defaults for the prior parameters are reasonable for
+    standardized data. However, a careful analysis should always
+    include careful choosing of priors.
 
     Citation
     --------
     
+    M. Suchard, Q. Wang, C. Chan, J. Frelinger, A. Cron and
+    M. West. 'Understanding GPU programming for statistical
+    computation: Studies in massively parallel massive mixtures.'
+    Journal of Computational and Graphical Statistics. 19 (2010):
+    419-438
 
     Returns
     -------
@@ -175,9 +186,10 @@ class DPNormalMixture(object):
         samples niter + nburn iterations only storing the last niter
         draws thinned as indicated.
 
-        if ident is True the munkres identification algorithm will be used
-        identifying to the INITIAL VALUES. These should be selected with 
-        great care. Also .. burning doesn't make much sense in this case.
+        if ident is True the munkres identification algorithm will be
+        used matching to the INITIAL VALUES. These should be selected
+        with great care. We recommend using the EM algorithm. Also
+        .. burning doesn't make much sense in this case.
         """
 
         self._setup_storage(niter)
