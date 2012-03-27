@@ -50,8 +50,12 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
     Citation
     --------
-    
 
+    M. Suchard, Q. Wang, C. Chan, J. Frelinger, A. Cron and
+    M. West. 'Understanding GPU programming for statistical
+    computation: Studies in massively parallel massive mixtures.'
+    Journal of Computational and Graphical Statistics. 19 (2010):
+    419-438
 
     Returns
     -------
@@ -77,6 +81,12 @@ class BEM_DPNormalMixture(DPNormalMixture):
         self.densities = None
 
     def optimize(self, maxiter=1000, perdiff=0.1):
+        """
+        Optimizes the posterior distribution given the data. The
+        algorithm terminates when either the maximum number of
+        iterations is reached or the percent difference in the
+        posterior is less than perdiff.
+        """
         self.expected_labels()
         ll_2 = self.log_posterior()
         ll_1 = 1

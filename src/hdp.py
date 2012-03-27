@@ -62,6 +62,17 @@ class HDPNormalMixture(DPNormalMixture):
     ncomp : nit
         Number of mixture components
 
+    Notes
+    -----
+    y_j ~ \sum_{k=1}^K \pi_{kj} {\cal N}(\mu_k, \Sigma_k)
+    \beta ~ stickbreak(\alpha)
+    \alpha ~ Ga(e, f)
+    \pi_{kj} = v_{kj}*\prod_{l=1}^{k-1}(1-v_{kj})
+    v_{kj} ~ beta(\alpha_0 \beta_k, alpha_0*(1-\sum_{l=1}^k \beta_l) )
+    \alpha_0 ~ Ga(g, h)
+    \mu_k ~ N(0, m\Sigma_k)
+    \Sigma_j ~ IW(nu0+2, nu0*\Phi_k)
+
     Returns
     -------
     **Attributes**
@@ -148,7 +159,15 @@ class HDPNormalMixture(DPNormalMixture):
         self.verbose = verbose
         
 
-    def sample(self, niter=1000, nburn=0, thin=1, tune_interval=100, ident=False):
+    def sample(self, niter=1000, nburn=5000, thin=1, tune_interval=100, ident=False):
+        """
+        Performs MCMC sampling of the posterior. \beta must be sampled
+        using Metropolis Hastings and its proposal distribution will
+        be tuned every tune_interval iterations during the burnin
+        period. It is suggested that an ample burnin is used and the
+        AR parameters stores the acceptance rate for the stick weights
+        of \beta and \alpha_0.
+        """
         if self.verbose:
             if self.gpu:
                 print "starting GPU enabled MCMC"
