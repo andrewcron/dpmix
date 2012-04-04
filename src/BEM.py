@@ -131,7 +131,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
             nrm, _ = gpu_apply_row_max(densities)
             gpu_sweep_col_diff(densities, nrm)
-            GPUarray_order(inplace_exp(densities), "F")
+            inplace_exp(densities); GPUarray_order(densities, "F")
             nrm = cuLA.dot(self.g_ones, tdens, "T")
             gpu_sweep_col_div(densities, nrm)
 
@@ -163,7 +163,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
     def maximize_Sigma(self):
         df = self.ct + self._nu0 + 2*self.ndim + 3
         if self.gpu:
-            GPUarray_order(inplace_sqrt(self.densities), "F")
+            inplace_sqrt(self.densities); GPUarray_order(self.densities, "F")
             #fltdens = self.densities.ravel()
             fltdens = GPUarray_reshape(self.densities, self.densities.size)
             self.xbar = (self.xbar.T / self.ct).T

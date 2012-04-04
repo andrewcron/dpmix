@@ -73,6 +73,10 @@ class HDPNormalMixture(DPNormalMixture):
     \mu_k ~ N(0, m\Sigma_k)
     \Sigma_j ~ IW(nu0+2, nu0*\Phi_k)
 
+    Citation
+    --------
+    **Coming Soon**
+
     Returns
     -------
     **Attributes**
