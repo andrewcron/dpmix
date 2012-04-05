@@ -146,8 +146,8 @@ class DPNormalMixture(object):
         # set gpu working vars
             if self.gpu:
                 self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
-                self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
-                self.g_ones_long = to_gpu(np.ones((self.nobs,1), dtype=np.float32))
+                #self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
+                #self.g_ones_long = to_gpu(np.ones((self.nobs,1), dtype=np.float32))
                 
         #verbosity
         self.verbose = verbose
