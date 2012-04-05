@@ -31,15 +31,22 @@ class Compiled_Kernels(object):
     """
     def __init__(self, src):
         self.src = src
-        self.module = SourceModule(src)
-        self.curDevice = drv.Context.get_device()
+        self.modules = { drv.Context.get_current() : SourceModule(self.src) }
+        #self.curDevice = drv.Context.get_device()
 
     def get_function(self, fn_str):
-        curDevice = drv.Context.get_device()
-        if self.curDevice != curDevice:
-            self.module = SourceModule(self.src)
-            self.curDevice = drv.Context.get_device()
-        return self.module.get_function(fn_str)
+        context = drv.Context.get_current()
+        try:
+            mod = self.modules[context]
+        except KeyError:
+            self.modules[context] = SourceModule(self.src)
+            mod = self.modules[context]
+        return mod.get_function(fn_str)
+        #curDevice = drv.Context.get_device()
+        #if self.curDevice != curDevice:
+        #    self.module = SourceModule(self.src)
+        #    self.curDevice = drv.Context.get_device()
+        #return self.module.get_function(fn_str)
 
 
 CUDA_Kernels = Compiled_Kernels(full_code)
