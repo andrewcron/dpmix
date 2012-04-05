@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     N = 3*int(1e4)
     K = 2
-    J = 4
+    J = 2
     ncomps = 3
     gpus = [2,3,4]
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
@@ -35,6 +35,7 @@ if __name__ == '__main__':
         Sigma[i] = np.identity(J)
     import pdb; pdb.set_trace()
     workers = multigpu.init_GPUWorkers(data, w, mu, Sigma, gpus)
-    #labels = multigpu.get_labels(workers, w, mu, Sigma)
+    labels = multigpu.get_labels(workers, w, mu, Sigma)
     multigpu.kill_workers(workers)
+    print "DONE!"
     

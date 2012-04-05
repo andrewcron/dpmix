@@ -37,6 +37,7 @@ class GPUWorker(threading.Thread):
         ## load my portion of data to gpu
         self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
         self.condition.release()
+        densities = 0
 
         ## this can only be killed by externally setting end_sampler to True
         ## and releasing the lock
@@ -51,7 +52,9 @@ class GPUWorker(threading.Thread):
             densities = gpustats.mvnpdf_multi(self.gdata, self.mu, self.Sigma,
                                               weights = self.w, get=False, logged=True,
                                               order='C')
-            labs = gpustats.sampler.sample_discrete(densities, logged=True)
+            self.labs = gpustats.sampler.sample_discrete(densities, logged=True)
+            print self.labs
+            print densities
             if self.relabel:
                 Z = gpu_apply_row_max(densities)[1].get()
             else:
@@ -65,8 +68,6 @@ class GPUWorker(threading.Thread):
         del densities
         self.ctx.pop()
         del self.ctx
-
-
 
 def init_GPUWorkers(data, w, mu, Sigma, devslist=None):
     nobs, ndim = data.shape
