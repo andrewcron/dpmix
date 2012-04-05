@@ -5,7 +5,7 @@ Created on Mar 15, 2012
 @author: Jacob Frelinger
 '''
 import sys
-sys.path.append('../src')
+sys.path.insert(0, '../build/lib.linux-x86_64-2.7/')
 
 import numpy as np
 import numpy.random as npr
@@ -81,7 +81,10 @@ if __name__ == '__main__':
     parser.add_option("--gpu", default=False)
     parser.add_option("--verbose", default=False)
     (options, args) = parser.parse_args()
-    use_gpu = bool(int(options.gpu))
+    if type(options.gpu) is bool:
+        use_gpu = options.gpu
+    else:
+        use_gpu = int(options.gpu)
     verbosity = int(options.verbose)
 
     N = int(1e4) # n data points per component

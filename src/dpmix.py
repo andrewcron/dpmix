@@ -11,7 +11,7 @@ import numpy.random as npr
 
 import pymc as pm
 
-from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, _get_cost
+from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, _get_cost, select_gpu
 
 import cython
 
@@ -29,6 +29,7 @@ try:
         import pycuda.gpuarray as gpuarray
         from pycuda.gpuarray import to_gpu
         from pycuda import cumath
+        import pycuda.driver as drv
         from pycuda.elementwise import ElementwiseKernel
         from scikits.cuda import linalg as cuLA; cuLA.init()
         from cuda_functions import *
@@ -107,13 +108,25 @@ class DPNormalMixture(object):
                 self.g_ones_long = data.g_ones_long
         else:
             if _has_gpu:
+                self.dev_num = 0
                 if gpu is not None:
-                    self.gpu = gpu
+                    if type(gpu) is int:
+                        self.gpu = True
+                        if gpu < drv.Device.count():
+                            self.dev_num = gpu
+                        else:
+                            raise ValueError("We dont have that many devices on this machine.")
+                    elif type(gpu) is bool:
+                        self.gpu = gpu
+                    else:
+                        raise TypeError("gpu must be either an int (for the device number) or bool.")
                 else:
                     self.gpu = _has_gpu
             else:
                 self.gpu = False
-                
+            if self.gpu:
+                select_gpu(self.dev_num)
+
             self.data = np.asarray(data)
             self.nobs, self.ndim = self.data.shape
             self.ncomp = ncomp

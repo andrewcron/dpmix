@@ -90,13 +90,25 @@ class HDPNormalMixture(DPNormalMixture):
         if not issubclass(type(data), HDPNormalMixture):
             # check for functioning gpu
             if _has_gpu:
+                self.dev_num = 0
                 if gpu is not None:
-                    self.gpu = gpu
+                    if type(gpu) is int:
+                        self.gpu = True
+                        if gpu < drv.Device.count():
+                            self.dev_num = gpu
+                        else:
+                            raise ValueError("We dont have that many devices on this machine.")
+                    elif type(gpu) is bool:
+                        self.gpu = gpu
+                    else:
+                        raise TypeError("gpu must be either an int (for the device number) or bool.")
                 else:
                     self.gpu = _has_gpu
             else:
                 self.gpu = False
-            
+            if self.gpu:
+                select_gpu(self.dev_num)
+
             # get the data .. should add checks here later
             self.data = [np.asarray(d) for d in data]
             self.ngroups = len(self.data)

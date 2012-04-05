@@ -11,6 +11,22 @@ import scipy.stats as stats
 
 import cython
 
+def select_gpu(devNum):
+    """
+    sets the devNum device as the active GPU if it's not already
+    active. Assumes that GPU capability has been checked.
+    """
+    import pycuda.autoinit as cudainit
+    import pycuda.driver as drv
+    context = cudainit.context
+    curDev = cudainit.device
+    newDev = drv.Device(devNum)
+    if curDev != newDev:
+        context.pop()
+        cudainit.context = newDev.make_context()
+        cudainit.device = newDev
+
+
 @cython.compile
 def _get_cost(x,y,C):
     n = len(x)

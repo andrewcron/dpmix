@@ -1,4 +1,5 @@
 import pycuda.autoinit
+import pycuda.driver as drv
 from pycuda.compiler import SourceModule
 
 import os.path as pth
@@ -23,4 +24,22 @@ full_code += open(pth.join(cu_file_path,"sweep_columns_cm.cu")).read() % { 'name
 full_code += open(pth.join(cu_file_path,"sweep_columns_cm.cu")).read() % { 'name' : 'mult' }
 full_code += open(pth.join(cu_file_path,"apply_rows_max_cm.cu")).read()
 
-CUDA_Kernels = SourceModule(full_code)
+class Compiled_Kernels(object):
+    """
+    Small wrapper to SourceModule that will check for
+    and handle context changes!
+    """
+    def __init__(self, src):
+        self.src = src
+        self.module = SourceModule(src)
+        self.curDevice = drv.Context.get_device()
+
+    def get_function(self, fn_str):
+        curDevice = drv.Context.get_device()
+        if self.curDevice != curDevice:
+            self.module = SourceModule(self.src)
+            self.curDevice = drv.Context.get_device()
+        return self.module.get_function(fn_str)
+
+
+CUDA_Kernels = Compiled_Kernels(full_code)
