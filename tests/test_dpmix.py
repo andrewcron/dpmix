@@ -97,6 +97,7 @@ if __name__ == '__main__':
 
     #import pdb
     #pdb.set_trace()
+    print "use_gpu=" + str(use_gpu)
     mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity)#, mu0=mu0)
     mcmc.sample(100,nburn=0)
     #pdb.set_trace()

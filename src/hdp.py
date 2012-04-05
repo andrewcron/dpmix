@@ -175,7 +175,7 @@ class HDPNormalMixture(DPNormalMixture):
         self.verbose = verbose
         
 
-    def sample(self, niter=1000, nburn=5000, thin=1, tune_interval=100, ident=False):
+    def sample(self, niter=1000, nburn=100, thin=1, tune_interval=100, ident=False):
         """
         Performs MCMC sampling of the posterior. \beta must be sampled
         using Metropolis Hastings and its proposal distribution will

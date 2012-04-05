@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     N = int(1e4)
     K = 2
-    J = 4
+    J = 3
     ncomps = 3
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
     data = data - data.mean(0)
@@ -27,12 +27,14 @@ if __name__ == '__main__':
     ind = np.arange(N); np.random.shuffle(ind);
     all_data = data[ind].copy()
     data = [ all_data[(N/J*i):(N/J*(i+1))].copy() for i in range(J) ]
+    print "MCMC 700 iter"
     mcmc = HDPNormalMixture(data, ncomp=3, gpu=True)
     mcmc.sample(200, nburn=500, tune_interval=100)
+    print "MCMC 200 iter identified"
     imcmc = HDPNormalMixture(mcmc)
-    imcmc.sample(200, ident=True)
-    import pdb
-    pdb.set_trace()
+    imcmc.sample(200, nburn=0, tune_interval=100, ident=True)
+    print imcmc.mu[-1]
+
 
 
     
