@@ -12,7 +12,7 @@ from test_dpmix import *
 import numpy as np
 import multigpu
 
-from dpmix import DPNormalMixture
+#from dpmix import DPNormalMixture
 
 if __name__ == '__main__':
 
@@ -20,7 +20,7 @@ if __name__ == '__main__':
     K = 2
     J = 2
     ncomps = 3
-    gpus = [2,3,4]
+    gpus = [2]
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
     data = data - data.mean(0)
     data = data/data.std(0)
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     Sigma = np.zeros((ncomps, J, J))
     for i in range(ncomps):
         Sigma[i] = np.identity(J)
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
     workers = multigpu.init_GPUWorkers(data, w, mu, Sigma, gpus)
     labels = multigpu.get_labels(workers, w, mu, Sigma)
     multigpu.kill_workers(workers)
