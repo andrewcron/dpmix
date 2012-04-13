@@ -5,6 +5,7 @@ Created on April 5, 2012
 """
 
 import sys
+import time
 sys.path.append("../src")
 
 from test_dpmix import *
@@ -12,11 +13,9 @@ from test_dpmix import *
 import numpy as np
 import multigpu
 
-from dpmix import DPNormalMixture
-
 if __name__ == '__main__':
 
-    N = 3*int(1e4)
+    N = 3*int(1e5)
     K = 2
     J = 2
     ncomps = 3
@@ -33,9 +32,11 @@ if __name__ == '__main__':
     Sigma = np.zeros((ncomps, J, J))
     for i in range(ncomps):
         Sigma[i] = np.identity(J)
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
     workers = multigpu.init_GPUWorkers(data, w, mu, Sigma, gpus)
-    labels = multigpu.get_labels(workers, w, mu, Sigma)
+    starttime = time.time()
+    for i in xrange(1000):
+        labels = multigpu.get_labels(workers, w, mu, Sigma)
     multigpu.kill_workers(workers)
-    print "DONE!"
+    print "DONE! it took " + str(time.time() - starttime)
     

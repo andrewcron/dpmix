@@ -37,7 +37,6 @@ class GPUWorker(threading.Thread):
         ## load my portion of data to gpu
         self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
         self.condition.release()
-        densities = 0
 
         ## this can only be killed by externally setting end_sampler to True
         ## and releasing the lock
@@ -49,17 +48,20 @@ class GPUWorker(threading.Thread):
             if self.end_sampler:
                 break
             ## get new samples and maybe row max
+            #print 'device ' + str(self.device) + ' started computing'
             densities = gpustats.mvnpdf_multi(self.gdata, self.mu, self.Sigma,
                                               weights = self.w, get=False, logged=True,
                                               order='C')
             self.labs = gpustats.sampler.sample_discrete(densities, logged=True)
-            print self.labs
-            print densities
+
+            #print 'device ' + str(self.device) + ' finished computing'
+            print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
             if self.relabel:
                 Z = gpu_apply_row_max(densities)[1].get()
             else:
                 Z = None
-                
+
+            densities.gpudata.free()
             self.new_params = False
             self.condition.release()
             ## host thread should gather new labels and proceed. 
