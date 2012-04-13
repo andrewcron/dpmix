@@ -53,9 +53,7 @@ class GPUWorker(threading.Thread):
                                               weights = self.w, get=False, logged=True,
                                               order='C')
             self.labs = gpustats.sampler.sample_discrete(densities, logged=True)
-
-            #print 'device ' + str(self.device) + ' finished computing'
-            print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
+            #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
             if self.relabel:
                 Z = gpu_apply_row_max(densities)[1].get()
             else:

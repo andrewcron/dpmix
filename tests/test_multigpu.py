@@ -15,11 +15,11 @@ import multigpu
 
 if __name__ == '__main__':
 
-    N = 3*int(1e5)
+    N = 3*int(1e6)
     K = 2
     J = 2
     ncomps = 3
-    gpus = [2,3,4]
+    gpus = [2]
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
     data = data - data.mean(0)
     data = data/data.std(0)
