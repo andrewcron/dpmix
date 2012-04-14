@@ -4,6 +4,7 @@ Written by: Andrew Cron
 """
 
 import threading
+import Queue
 import numpy as np
 import pycuda.autoinit
 import pycuda.driver as drv
@@ -12,57 +13,56 @@ import gpustats
 import gpustats.sampler
 from cuda_functions import *
 
+class Theta(object):
+    def __init__(self, w, mu, Sigma, relabel=False):
+        self.w = w
+        self.mu = mu
+        self.Sigma = Sigma
+        self.relabel = relabel
+        
+
 class GPUWorker(threading.Thread):
 
-    def __init__(self, data, w, mu, Sigma, relabel, device):
+    def __init__(self, data, device):
         threading.Thread.__init__(self)
 
         self.data = data
-        self.w = w.flatten()
-        self.mu = mu
-        self.Sigma = Sigma
         self.device = device
-        self.relabel = relabel
         self.nobs, self.ndim = data.shape
-        self.ncomp = len(w)
-        self.condition = threading.Condition()
-        self.end_sampler = False
-        self.new_params = False
+        
+        self.params = Queue.Queue()
+        self.results = Queue.Queue()
 
     def run(self):
 
-        self.condition.acquire()
         self.dev = drv.Device(self.device)
         self.ctx = self.dev.make_context()
         ## load my portion of data to gpu
         self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
-        self.condition.release()
 
-        ## this can only be killed by externally setting end_sampler to True
-        ## and releasing the lock
-        while not self.end_sampler:
-            ## wait for new params ... the model params should have changed
-            self.condition.acquire()
-            while not self.new_params and not self.end_sampler:
-                self.condition.wait()
-            if self.end_sampler:
+        ## gets tasks from params queue and puts labels in results queue .. killed
+        ## with None poison pill
+        while True:
+            theta = self.params.get()
+            if theta is None:
                 break
+
             ## get new samples and maybe row max
             #print 'device ' + str(self.device) + ' started computing'
-            densities = gpustats.mvnpdf_multi(self.gdata, self.mu, self.Sigma,
-                                              weights = self.w, get=False, logged=True,
+            densities = gpustats.mvnpdf_multi(self.gdata, theta.mu, theta.Sigma,
+                                              weights = theta.w.flatten(), get=False, logged=True,
                                               order='C')
             self.labs = gpustats.sampler.sample_discrete(densities, logged=True)
             #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
-            if self.relabel:
+            if theta.relabel:
                 Z = gpu_apply_row_max(densities)[1].get()
             else:
                 Z = None
 
-            densities.gpudata.free()
-            self.new_params = False
-            self.condition.release()
-            ## host thread should gather new labels and proceed. 
+            densities.gpudata.free() # avoid leaks
+            self.results.put(self.labs.copy())
+            self.params.task_done()
+
 
         del self.gdata
         del densities
@@ -81,9 +81,7 @@ def init_GPUWorkers(data, w, mu, Sigma, devslist=None):
     #launch threads
     i=0; workers = []
     for dev in devslist:
-        workers.append(GPUWorker(data[partitions[i]:partitions[i+1]], 
-                                 w=w, mu=mu, Sigma=Sigma, relabel=False,
-                                 device=dev))
+        workers.append(GPUWorker(data[partitions[i]:partitions[i+1]], device=dev))
         workers[-1].start()
         i+=1
     return workers
@@ -92,33 +90,23 @@ def get_labels(workers, w, mu, Sigma):
     # run all the threads
     nobs, i = 0, 0
     partitions = [0]
+    theta = Theta(w, mu, Sigma)
     for thd in workers:
-        # get control of thread
-        thd.condition.acquire()
         # give new params
         nobs += thd.nobs
         partitions.append(nobs)
-        thd.w = w
-        thd.mu = mu
-        thd.Sigma = Sigma
-        thd.new_params = True
-        thd.condition.notify()
-        thd.condition.release()
+        thd.params.put(theta)
     #gather the results
     res = np.zeros(nobs, dtype=np.float32)
     for thd in workers:
-        thd.condition.acquire() # wait until finished
-        res[partitions[i]:partitions[i+1]] = thd.labs.copy()
-        thd.condition.release() 
+        labs = thd.results.get()
+        res[partitions[i]:partitions[i+1]] = labs
         i+=1
     return res
 
 def kill_workers(workers):
     for thd in workers:
-        thd.condition.acquire()
-        thd.end_sampler = True
-        thd.condition.notify()
-        thd.condition.release()
+        thd.params.put(None)
     
         
 
