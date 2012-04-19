@@ -73,6 +73,10 @@ class BEM_DPNormalMixture(DPNormalMixture):
         super(BEM_DPNormalMixture, self).__init__(
             data, ncomp, gamma0, m0, nu0, Phi0, e0, f0,
             mu0, Sigma0, weights0, alpha0, gpu, verbose)
+        if self.gpu:
+            self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
+            self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
+            self.g_ones_long = to_gpu(np.ones((self.nobs, 1), dtype=np.float32))
         self.alpha = self._alpha0
         self.weights = self._weights0.copy()
         self.stick_weights = self.weights.copy()

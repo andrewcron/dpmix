@@ -61,7 +61,7 @@ class GPUWorker(threading.Thread):
                 Z = None
 
             densities.gpudata.free() # avoid leaks
-            self.results.put(self.labs.copy())
+            self.results.put([self.labs.copy(), Z])
             self.params.task_done()
 
 
@@ -71,6 +71,7 @@ class GPUWorker(threading.Thread):
         del self.ctx
 
 def init_GPUWorkers(data, w, mu, Sigma, devslist=None):
+
     nobs, ndim = data.shape
     lenpart = nobs / len(devslist)
     partitions = range(0, nobs, lenpart); 
@@ -82,16 +83,15 @@ def init_GPUWorkers(data, w, mu, Sigma, devslist=None):
     #launch threads
     i=0; workers = []
     for dev in devslist:
-        workers.append(GPUWorker(data[partitions[i]:partitions[i+1]], device=dev))
-        workers[-1].start()
+        workers.append(GPUWorker(data[partitions[i]:partitions[i+1]], device=int(dev)))
         i+=1
     return workers
 
-def get_labels(workers, w, mu, Sigma):
+def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
     # run all the threads
     nobs, i = 0, 0
     partitions = [0]
-    theta = Theta(w, mu, Sigma)
+    theta = Theta(w, mu, Sigma, relabel)
     for thd in workers:
         # give new params
         nobs += thd.nobs
@@ -99,13 +99,21 @@ def get_labels(workers, w, mu, Sigma):
         thd.params.put(theta)
     #gather the results
     res = np.zeros(nobs, dtype=np.float32)
+    if relabel:
+        Z = res.copy()
+    else:
+        Z = None
     for thd in workers:
         labs = thd.results.get()
-        res[partitions[i]:partitions[i+1]] = labs
+        res[partitions[i]:partitions[i+1]] = labs[0]
+        if relabel:
+            Z[partitions[i]:partitions[i+1]] = labs[1]
         i+=1
-    return res
 
-def kill_workers(workers):
+    return res, Z
+
+
+def kill_GPUWorkers(workers):
     for thd in workers:
         thd.params.put(None)
     

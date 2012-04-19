@@ -86,6 +86,8 @@ if __name__ == '__main__':
 
     if type(options.gpu) is bool:
         use_gpu = options.gpu
+    elif options.gpu == 'ALL':
+        use_gpu = [0,1,2,3]
     else:
         use_gpu = int(options.gpu)
     verbosity = int(options.verbose)
@@ -100,7 +102,7 @@ if __name__ == '__main__':
 
     #import pdb
     #pdb.set_trace()
-    mcmc = DPNormalMixture(data, ncomp=50, gpu=use_gpu, verbose=verbosity, 
+    mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
     mcmc.sample(1000,nburn=0)
     #pdb.set_trace()
