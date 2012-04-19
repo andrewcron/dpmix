@@ -146,6 +146,10 @@ class DPNormalMixture(object):
         
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, e0, f0)
+        ## Check data for non-contiguous crap
+        if not (self.data.flags["C_CONTIGUOUS"] or self.data.flags["F_CONTIGUOUS"]):
+            self.data = self.data.copy()
+        
         ## multiCPU stuf
         self.parallel = parallel
         if self.parallel:
