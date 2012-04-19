@@ -13,6 +13,8 @@ import gpustats
 import gpustats.sampler
 from cuda_functions import *
 
+
+########### Multi GPU ##########################
 class Theta(object):
     def __init__(self, w, mu, Sigma, relabel=False):
         self.w = w
@@ -20,7 +22,6 @@ class Theta(object):
         self.Sigma = Sigma
         self.relabel = relabel
         
-
 class GPUWorker(threading.Thread):
 
     def __init__(self, data, device):

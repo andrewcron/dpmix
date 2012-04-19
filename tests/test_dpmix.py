@@ -5,15 +5,16 @@ Created on Mar 15, 2012
 @author: Jacob Frelinger
 '''
 import sys
-sys.path.insert(0, '../build/lib.linux-x86_64-2.7/')
+#sys.path.insert(0, '../build/lib.linux-x86_64-2.7/')
+sys.path.insert(0, "../src")
 
 import numpy as np
 import numpy.random as npr
 import pymc as pm
 #
-#from dpmix import DPNormalMixture
-#from BEM import BEM_DPNormalMixture
-from dpmix import DPNormalMixture, BEM_DPNormalMixture
+from dpmix import DPNormalMixture
+from BEM import BEM_DPNormalMixture
+#from dpmix import DPNormalMixture, BEM_DPNormalMixture
 import pylab
 
 
@@ -80,7 +81,9 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option("--gpu", default=False)
     parser.add_option("--verbose", default=False)
+    parser.add_option("--parallel", default=False, action="store_true")
     (options, args) = parser.parse_args()
+
     if type(options.gpu) is bool:
         use_gpu = options.gpu
     else:
@@ -97,8 +100,9 @@ if __name__ == '__main__':
 
     #import pdb
     #pdb.set_trace()
-    mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity)#, mu0=mu0)
-    mcmc.sample(100,nburn=0)
+    mcmc = DPNormalMixture(data, ncomp=50, gpu=use_gpu, verbose=verbosity, 
+                           parallel=options.parallel)#, mu0=mu0)
+    mcmc.sample(1000,nburn=0)
     #pdb.set_trace()
     bem = BEM_DPNormalMixture(mcmc, verbose=verbosity)
     bem.optimize(maxiter=200)

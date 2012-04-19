@@ -12,7 +12,9 @@ import numpy.random as npr
 import pymc as pm
 
 from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, _get_cost, select_gpu
+from multicpu import CPUWorker, CompUpdate
 
+import multiprocessing
 import cython
 
 try:
@@ -82,7 +84,7 @@ class DPNormalMixture(object):
     def __init__(self, data, ncomp=256, gamma0=10, m0=None,
                  nu0=None, Phi0=None, e0=1, f0=1,
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
-                 gpu=None, verbose=False):
+                 gpu=None, parallel=True, verbose=False):
         if issubclass(type(data), DPNormalMixture):
             self.data = data.data
             self.nobs, self.ndim = self.data.shape
@@ -102,6 +104,7 @@ class DPNormalMixture(object):
             f0 = data.f
             self.gamma = data.gamma
             self.gpu = data.gpu
+            self.parallel = data.parallel
             if self.gpu:
                 self.gdata = data.gdata
                 self.g_ones = data.g_ones
@@ -154,6 +157,16 @@ class DPNormalMixture(object):
         
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, e0, f0)
+        ## multiCPU stuf
+        self.parallel = parallel
+        if self.parallel:
+            self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
+            self.work_queue = multiprocessing.Queue()
+            self.result_queue = multiprocessing.Queue()
+            self.workers = [ CPUWorker(self.data, self.gamma, self.mu_prior_mean, 
+                                       self._Phi0, self._nu0, self.work_queue, self.result_queue)
+                             for i in xrange(self.num_cores) ]
+        
 
     def _set_initial_values(self, alpha0, nu0, Phi0, mu0, Sigma0, weights0,
                             e0, f0):
@@ -206,6 +219,11 @@ class DPNormalMixture(object):
         """
 
         self._setup_storage(niter)
+
+        # start threads
+        if self.parallel:
+            for w in self.workers:
+                w.start()
 
         alpha = self._alpha0
         weights = self._weights0
@@ -265,6 +283,11 @@ class DPNormalMixture(object):
             self.mu[i] = mu
             self.Sigma[i] = Sigma
 
+        # clean up threads
+        if self.parallel:
+            for i in xrange(self.num_cores):
+                self.work_queue.put(None)
+
     # so pylint won't complain so much
     # alpha hyperparameters
     e = f = 1
@@ -314,39 +337,51 @@ class DPNormalMixture(object):
         mu_output = np.zeros((self.ncomp, self.ndim))
         Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim))
 
+        num_jobs = self.ncomp
         for j in xrange(self.ncomp):
             mask = component_mask[j]
-            Xj = self.data[mask]
-            nj = len(Xj)
+            if self.parallel:
+                self.work_queue.put(CompUpdate(j, mask, Sigma[j]))
+            else:
+                Xj = self.data[mask]
+                nj = len(Xj)
+                
+                sumxj = Xj.sum(0)
 
-            sumxj = Xj.sum(0)
+                gam = self.gamma[j]
+                mu_hyper = self.mu_prior_mean
 
-            gam = self.gamma[j]
-            mu_hyper = self.mu_prior_mean
+                post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
+                post_cov = 1 / (1 / gam + nj) * Sigma[j]
 
-            post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
-            post_cov = 1 / (1 / gam + nj) * Sigma[j]
+                new_mu = pm.rmv_normal_cov(post_mean, post_cov)
 
-            new_mu = pm.rmv_normal_cov(post_mean, post_cov)
+                Xj_demeaned = Xj - new_mu
 
-            Xj_demeaned = Xj - new_mu
+                mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
+                data_SS = np.dot(Xj_demeaned.T, Xj_demeaned)
+                post_Phi = data_SS + mu_SS + self._Phi0[j]
 
-            mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
-            data_SS = np.dot(Xj_demeaned.T, Xj_demeaned)
-            post_Phi = data_SS + mu_SS + self._Phi0[j]
+                # symmetrize
+                post_Phi = (post_Phi + post_Phi.T) / 2
+                
+                # P(Sigma) ~ IW(nu + 2, nu * Phi)
+                # P(Sigma | theta, Y) ~
+                post_nu = nj + self.ndim + self._nu0 + 2
 
-            # symmetrize
-            post_Phi = (post_Phi + post_Phi.T) / 2
+                # pymc rinverse_wishart takes
+                new_Sigma = pm.rinverse_wishart_prec(post_nu, post_Phi)
 
-            # P(Sigma) ~ IW(nu + 2, nu * Phi)
-            # P(Sigma | theta, Y) ~
-            post_nu = nj + self.ndim + self._nu0 + 2
+                mu_output[j] = new_mu
+                Sigma_output[j] = new_Sigma
 
-            # pymc rinverse_wishart takes
-            new_Sigma = pm.rinverse_wishart_prec(post_nu, post_Phi)
-
-            mu_output[j] = new_mu
-            Sigma_output[j] = new_Sigma
+        if self.parallel:
+            while num_jobs:
+                result = self.result_queue.get()
+                j = result.comp
+                mu_output[j] = result.new_mu
+                Sigma_output[j] = result.new_Sigma
+                num_jobs -= 1
 
         return mu_output, Sigma_output
 
