@@ -38,7 +38,7 @@ if __name__ == '__main__':
     for i in xrange(100):
         if i % 50 == 0:
             print i
-        labels = multigpu.get_labels(workers, w, mu, Sigma)
+        labels = multigpu.get_labelsGPU(workers, w, mu, Sigma)
         #import pdb; pdb.set_trace()
 
 

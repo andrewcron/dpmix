@@ -256,7 +256,7 @@ class HDPNormalMixture(DPNormalMixture):
         self.alpha0 = np.zeros(nresults)
 
     def _update_labels(self, mu, Sigma, weights):
-        # gets the latent classifications .. 
+        # gets the latent classifications .. easily done with current multigpu
         labels = [np.zeros(self.nobs[j]) for j in range(self.ngroups)]
         if self._ident:
             zhat = np.zeros(sum(self.nobs), dtype=np.int); 

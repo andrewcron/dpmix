@@ -33,11 +33,13 @@ class GPUWorker(threading.Thread):
         
         self.params = Queue.Queue()
         self.results = Queue.Queue()
+        self.dev = drv.Device(self.device)
 
     def run(self):
 
-        self.dev = drv.Device(self.device)
-        self.ctx = self.dev.make_context()
+        self.ctx = self.dev.make_context()        
+        print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
+        
         ## load my portion of data to gpu
         self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
 
@@ -54,7 +56,8 @@ class GPUWorker(threading.Thread):
                                               weights = theta.w.flatten(), get=False, logged=True,
                                               order='C')
             self.labs = gpustats.sampler.sample_discrete(densities, logged=True)
-            #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
+            self.dev_mem = drv.mem_get_info()
+            print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
             if theta.relabel:
                 Z = gpu_apply_row_max(densities)[1].get()
             else:
@@ -64,11 +67,13 @@ class GPUWorker(threading.Thread):
             self.results.put([self.labs.copy(), Z])
             self.params.task_done()
 
-
+        self.gdata.gpudata.free()
         del self.gdata
         del densities
-        self.ctx.pop()
-        del self.ctx
+        print 'killed thread ' + str(self.device)
+        print 'available mem ' + str(drv.mem_get_info())
+        self.ctx.detach()
+
 
 def init_GPUWorkers(data, w, mu, Sigma, devslist=None):
 

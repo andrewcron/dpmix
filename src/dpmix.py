@@ -122,7 +122,7 @@ class DPNormalMixture(object):
                         self.dev_list = np.asarray(np.abs(gpu), dtype=np.int)
                         if self.dev_list.shape == ():
                             self.dev_list.shape = 1
-                        if np.sum(self.dev_list > drv.Device.count()):
+                        if np.sum(self.dev_list >= drv.Device.count()):
                             raise ValueError("We dont have that many devices on this machine.")             
 
             self.data = np.asarray(data)
