@@ -105,11 +105,12 @@ if __name__ == '__main__':
     mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
     mcmc.sample(1000,nburn=0)
-    #pdb.set_trace()
+    print mcmc.mu[-1]
+    
     bem = BEM_DPNormalMixture(mcmc, verbose=verbosity)
     bem.optimize(maxiter=200)
     print bem.mu
-    #pdb.set_trace()
+
     ident_mcmc = DPNormalMixture(bem, verbose=verbosity)
     ident_mcmc.sample(100, nburn=0, ident=False)
 

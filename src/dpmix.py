@@ -39,8 +39,8 @@ try:
         # inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
         # inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
         # gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
-        import pycuda.driver as drv
-        drv.init()
+        # import pycuda.driver as drv
+        # drv.init()
         from multigpu import init_GPUWorkers, get_labelsGPU, kill_GPUWorkers
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
@@ -122,8 +122,9 @@ class DPNormalMixture(object):
                         self.dev_list = np.asarray(np.abs(gpu), dtype=np.int)
                         if self.dev_list.shape == ():
                             self.dev_list.shape = 1
-                        if np.sum(self.dev_list >= drv.Device.count()):
-                            raise ValueError("We dont have that many devices on this machine.")             
+                        ## MOVED TO MULTIGPU
+                        #if np.sum(self.dev_list >= drv.Device.count()):
+                        #    raise ValueError("We dont have that many devices on this machine.")             
 
             self.data = np.asarray(data)
             self.nobs, self.ndim = self.data.shape

@@ -17,15 +17,42 @@ class CPUWorker(multiprocessing.Process):
         self.nu0 = nu0
         self.data = data.copy()
         self.nobs, self.ndim = self.data.shape
+        self.ncomp = len(gamma)
+
+    def set_dens(self, shared_dens):
+        self.dens = np.frombuffer(shared_dens).reshape(self.nobs, self.ncomp)
 
     def run(self):
         while True:
             new_work = self.task_queue.get()
             if new_work is None:
                 break # poison pill
-            new_work(self.data, self.gamma, self.mu_prior_mean, self.Phi0, self.nu0)
+            if type(new_work) == CompUpdate:
+                new_work(self.data, self.gamma, self.mu_prior_mean, self.Phi0, self.nu0)
+            else:
+                new_work(self.data, self.gamma, self.mu_prior_mean, 
+                         self.Phi0, self.nu0, self.dens)                
             self.result_queue.put(new_work)
 
+class BEMSigmaUpdate(object):
+    def __init__(self, ct, xbar, Sigma, comp):
+        self.comp = comp
+        self.ct = ct
+        self.xbar = xbar
+        self.Sigma = Sigma.copy()
+
+    def __call__(self, data, gamma, mu_prior_mean, Phi0, nu0, dens):
+        j = self.comp
+        if self.ct[j]>0.1:
+            Xj_d = (data - self.xbar[j,:]/self.ct[j])
+            SS = np.dot(Xj_d.T * dens[:,j].flatten(), Xj_d)
+            SS += Phi0[j] + (self.ct[j]/(1+gamma[j]*self.ct[j]))*np.outer(
+                (1/self.ct[j])*self.xbar[j,:] - mu_prior_mean,
+                (1/self.ct[j])*self.xbar[j,:] - mu_prior_mean)
+            self.Sigma = SS / self.ct[j]
+
+
+    
 
 class CompUpdate(object):
     def __init__(self, comp, mask, Sigma):
