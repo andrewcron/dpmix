@@ -141,6 +141,7 @@ class DPNormalMixture(object):
                 self.mu_prior_mean = np.zeros(self.ndim)
 
             self.gamma = gamma0*np.ones(ncomp)
+            self.parallel = parallel
                         
         #verbosity
         self.verbose = verbose
@@ -152,7 +153,6 @@ class DPNormalMixture(object):
             self.data = self.data.copy()
         
         ## multiCPU stuf
-        self.parallel = parallel
         if self.parallel:
             self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
             self.work_queue = multiprocessing.Queue()

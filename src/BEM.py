@@ -27,6 +27,7 @@ try:
         #inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
         #gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
         from multigpu import init_GPUWorkers, get_expected_labels_GPU, kill_GPUWorkers, start_GPUWorkers
+        from multicpu import BEMSigmaUpdate
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
         _has_gpu=False
@@ -68,12 +69,12 @@ class BEM_DPNormalMixture(DPNormalMixture):
     def __init__(self, data, ncomp=256, gamma0=100, m0=None,
                  nu0=None, Phi0=None, e0=1, f0=1,
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
-                 gpu=None, verbose=False):
+                 gpu=None, parallel=False, verbose=False):
 
         ## for now, initialization is exactly the same .... 
         super(BEM_DPNormalMixture, self).__init__(
             data, ncomp, gamma0, m0, nu0, Phi0, e0, f0,
-            mu0, Sigma0, weights0, alpha0, gpu, verbose)
+            mu0, Sigma0, weights0, alpha0, gpu, parallel,  verbose)
         self.alpha = self._alpha0
         self.weights = self._weights0.copy()
         self.stick_weights = self.weights.copy()

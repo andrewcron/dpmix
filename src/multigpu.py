@@ -33,6 +33,7 @@ class MCMC_Task(object):
         densities = gpustats.mvnpdf_multi(gdata, self.mu, self.Sigma,
                                           weights = self.w.flatten(), get=False, logged=True,
                                           order='C')
+
         labs = gsamp.sample_discrete(densities, logged=True)
         if self.relabel:
             Z = cufuncs.gpu_apply_row_max(densities)[1].get()
@@ -101,12 +102,6 @@ class GPUWorker(multiprocessing.Process):
 
     def run(self):
         drv.init()
-        try:
-            self.dev = drv.Device(self.device)
-        except:
-            raise ValueError("Unable to allocate device " + str(self.device) + "!")
-        self.ctx = self.dev.make_context()        
-
         # imports must be done here ....
         import pycuda.tools as pytools
         pytools.clear_context_caches()
@@ -114,12 +109,23 @@ class GPUWorker(multiprocessing.Process):
         import gpustats.sampler as gsamp
         import gpustats.util as gutil
         import cuda_functions as cufuncs
-        from scikits.cuda import linalg as cuLA; cuLA.init()
+        from scikits.cuda import linalg as cuLA
         from pycuda import cumath
-
         from pycuda.elementwise import ElementwiseKernel
         inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
-        #from cuda_functions import *
+
+        ## some of these libraries initialize a context by default ... dumb
+        ctx = drv.Context.get_current()
+        if ctx is not None:
+            ctx = ctx.detach()
+            del ctx
+
+        try:
+            self.dev = drv.Device(self.device)
+        except:
+            raise ValueError("Unable to allocate device " + str(self.device) + "!")
+        self.ctx = self.dev.make_context()     
+        cuLA.init()   
 
         #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
         
@@ -192,8 +198,6 @@ def start_GPUWorkers(workers):
             for deadthd in workers:
                 deadthd.terminate()
             raise MemoryError("Bad things happened with GPU ... ")
-
-
     
             
 def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
