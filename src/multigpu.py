@@ -14,6 +14,8 @@ from pycuda.gpuarray import to_gpu
 #import gpustats.sampler
 #from cuda_functions import *
 
+## WIERDNESS: libraries must be loaded inside of "run" and passed to
+## functions to work properly ... 
 
 ########### Multi GPU ##########################
 class MCMC_Task(object):
@@ -111,9 +113,9 @@ class GPUWorker(multiprocessing.Process):
         import cuda_functions as cufuncs
         from scikits.cuda import linalg as cuLA; cuLA.init()
         from pycuda import cumath
+
         from pycuda.elementwise import ElementwiseKernel
         inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
-        
         #from cuda_functions import *
 
         #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
@@ -148,22 +150,42 @@ class GPUWorker(multiprocessing.Process):
         del self.ctx
 
 
-def init_GPUWorkers(data, w, mu, Sigma, devslist=None):
-
-    nobs, ndim = data.shape
-    lenpart = nobs / len(devslist)
-    partitions = range(0, nobs, lenpart); 
-    if len(partitions)==len(devslist):
-        partitions.append(nobs)
-    else:
-        partitions[-1] = nobs
+def init_GPUWorkers(data, devslist=None):
+    ## dpmix and BEM
+    if type(data) == np.ndarray:
+        nobs, ndim = data.shape
+        lenpart = nobs / len(devslist)
+        partitions = range(0, nobs, lenpart); 
+        if len(partitions)==len(devslist):
+            partitions.append(nobs)
+        else:
+            partitions[-1] = nobs
     
     #launch threads
-    i=0; workers = []
-    for dev in devslist:
-        workers.append(GPUWorker(data[partitions[i]:partitions[i+1]], device=int(dev)))
-        i+=1
+        i=0; workers = []
+        for dev in devslist:
+            workers.append(GPUWorker(data[partitions[i]:partitions[i+1]], device=int(dev)))
+            i+=1
+    else: ## HDP .. one or more datasets per GPU
+        ndev = len(devslist)
+        i=0; workers = []
+        for dt in data:
+            workers.append(GPUWorker(dt, device=int(devslist[i%ndev])))
+            i += 1
     return workers
+            
+def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
+    labels = []; Z = [];
+    #import pdb; pdb.set_trace()
+    i = 0
+    for thd in workers:
+        thd.params.put(MCMC_Task(w[i], mu, Sigma, relabel))
+        i += 1
+    for thd in workers:
+        res = thd.results.get()
+        labels.append(res[0])
+        Z.append(res[1])
+    return labels, Z 
 
 def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
     # run all the threads

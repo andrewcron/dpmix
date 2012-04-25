@@ -162,8 +162,7 @@ class DPNormalMixture(object):
                              for i in xrange(self.num_cores) ]
         ## multiGPU stuff
         if self.gpu:
-            self.gpu_workers = init_GPUWorkers(self.data, self._weights0, self._mu0, 
-                                               self._Sigma0, self.dev_list)
+            self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)
         
 
     def _set_initial_values(self, alpha0, nu0, Phi0, mu0, Sigma0, weights0,
@@ -323,9 +322,13 @@ class DPNormalMixture(object):
         b = self.f - np.log(1 - V).sum()
         return npr.gamma(a, scale=1 / b)
 
-    def _update_mu_Sigma(self, Sigma, component_mask):
+    def _update_mu_Sigma(self, Sigma, component_mask, other_dat=None):
         mu_output = np.zeros((self.ncomp, self.ndim))
         Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim))
+        if other_dat is None:
+            data = self.data
+        else:
+            data = other_dat
 
         num_jobs = self.ncomp
         for j in xrange(self.ncomp):
@@ -333,7 +336,7 @@ class DPNormalMixture(object):
             if self.parallel:
                 self.work_queue.put(CompUpdate(j, mask, Sigma[j]))
             else:
-                Xj = self.data[mask]
+                Xj = data[mask]
                 nj = len(Xj)
                 
                 sumxj = Xj.sum(0)
