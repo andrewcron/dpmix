@@ -21,6 +21,9 @@ class CPUWorker(multiprocessing.Process):
 
     def set_dens(self, shared_dens):
         self.dens = np.frombuffer(shared_dens).reshape(self.nobs, self.ncomp)
+    def set_data(self, shared_data, nobs, ndim):
+        self.data = np.frombuffer(shared_data).reshape(nobs, ndim)
+        self.nobs, self.ndim = nobs, ndim
 
     def run(self):
         while True:

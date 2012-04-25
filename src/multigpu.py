@@ -6,6 +6,7 @@ Written by: Andrew Cron
 #import threading
 #import Queue
 import multiprocessing
+import Queue as pQueue
 import numpy as np
 #import pycuda.autoinit
 import pycuda.driver as drv
@@ -26,7 +27,7 @@ class MCMC_Task(object):
         self.relabel = relabel
 
     def __call__(self, gdata, res_queue, g_ones_long=None,
-                 gpustats=None, gutil=None, gsamp=None, cufuncs=None, 
+                 gpustats=None, gsamp=None, cufuncs=None, gutil=None,
                  cuLA=None, cumath=None, iexp=None):
 
         densities = gpustats.mvnpdf_multi(gdata, self.mu, self.Sigma,
@@ -34,7 +35,7 @@ class MCMC_Task(object):
                                           order='C')
         labs = gsamp.sample_discrete(densities, logged=True)
         if self.relabel:
-            Z = gpu_apply_row_max(densities)[1].get()
+            Z = cufuncs.gpu_apply_row_max(densities)[1].get()
         else:
             Z = None
         res_queue.put([labs.copy(), Z])
@@ -50,7 +51,7 @@ class BEM_Task(object):
         self._logmnflt = np.log(1e-37)
 
     def __call__(self, gdata, res_queue, g_ones_long=None,
-                 gpustats=None, gutil=None, gsamp=None, cufuncs=None, 
+                 gpustats=None, gsamp=None, cufuncs=None, gutil=None,
                  cuLA=None, cumath=None, iexp=None):
 
         ncomp = len(self.w)
@@ -107,6 +108,8 @@ class GPUWorker(multiprocessing.Process):
         self.ctx = self.dev.make_context()        
 
         # imports must be done here ....
+        import pycuda.tools as pytools
+        pytools.clear_context_caches()
         import gpustats
         import gpustats.sampler as gsamp
         import gpustats.util as gutil
@@ -124,6 +127,9 @@ class GPUWorker(multiprocessing.Process):
         self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
         self.g_ones_long = to_gpu(np.ones((self.nobs,1), dtype=np.float32))
 
+        ## put empty object in result queue to indicate readiness
+        self.results.put(None)
+
         ## gets tasks from params queue and puts labels in results queue .. killed
         ## with None poison pill
         while True:
@@ -133,10 +139,10 @@ class GPUWorker(multiprocessing.Process):
 
             ## Execute Task
             #print 'device ' + str(self.device) + ' started computing'
-            task(self.gdata, self.results, self.g_ones_long, gpustats, gutil, gsamp,
-                 cufuncs, cuLA, cumath, inplace_exp)
+            task(self.gdata, self.results, self.g_ones_long, gpustats, gsamp,
+                 cufuncs, gutil, cuLA, cumath, inplace_exp)
 
-            self.dev_mem = drv.mem_get_info()
+            #self.dev_mem = drv.mem_get_info()
             #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
             #self.params.task_done()
 
@@ -148,6 +154,8 @@ class GPUWorker(multiprocessing.Process):
         #print 'available mem ' + str(drv.mem_get_info())
         self.ctx.detach()
         del self.ctx
+        ## put None in results to indicate destruction ... forces block
+        self.results.put(None)
 
 
 def init_GPUWorkers(data, devslist=None):
@@ -173,6 +181,20 @@ def init_GPUWorkers(data, devslist=None):
             workers.append(GPUWorker(dt, device=int(devslist[i%ndev])))
             i += 1
     return workers
+
+def start_GPUWorkers(workers):
+    for thd in workers:
+        thd.start()
+        try:
+            thd.results.get(timeout=60)
+        except pQueue.Empty:
+            ## thread got hung up ... kill them all and raise exception
+            for deadthd in workers:
+                deadthd.terminate()
+            raise MemoryError("Bad things happened with GPU ... ")
+
+
+    
             
 def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
     labels = []; Z = [];
@@ -241,6 +263,10 @@ def get_expected_labels_GPU(workers, w, mu, Sigma):
 def kill_GPUWorkers(workers):
     for thd in workers:
         thd.params.put(None)
+        try:
+            thd.results.get(timeout=60)
+        except pQueue.Empty:
+            thd.terminate()
     
         
 

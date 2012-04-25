@@ -13,8 +13,6 @@ from dpmix import DPNormalMixture
 
 import cython
 
-#import pdb
-
 try:
     from munkres import munkres
 except ImportError:
@@ -35,12 +33,14 @@ try:
         # inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
         # inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
         # gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
-        from multigpu import init_GPUWorkers, kill_GPUWorkers, get_hdp_labels_GPU
+        from multigpu import init_GPUWorkers, kill_GPUWorkers, get_hdp_labels_GPU, start_GPUWorkers
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
         _has_gpu=False
 except ImportError:
     _has_gpu = False
+
+from multicpu import CPUWorker
 
 # func to get lpost for beta
 #@cython.compile
@@ -87,7 +87,7 @@ class HDPNormalMixture(DPNormalMixture):
     def __init__(self, data, ncomp=256, gamma0=10, m0=None,
                  nu0=None, Phi0=None, e0=1, f0=1, g0=1, h0=1, 
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
-                 gpu=None, verbose=False):
+                 gpu=None, parallel=False, verbose=False):
 
         if not issubclass(type(data), HDPNormalMixture):
             # check for functioning gpu
@@ -104,7 +104,7 @@ class HDPNormalMixture(DPNormalMixture):
             else:
                 self.gpu = False
 
-
+            self.parallel = parallel
             # get the data .. should add checks here later
             self.data = [np.asarray(d) for d in data]
             self.ngroups = len(self.data)
@@ -159,6 +159,9 @@ class HDPNormalMixture(DPNormalMixture):
             self._Sigma0 = data.Sigma[-1].copy()
             self.prop_scale = data.prop_scale.copy()
             self.gpu = data.gpu
+            if self.gpu:
+                self.dev_list = data.dev_list
+            self.parallel = data.parallel
 
         
         self.AR = np.zeros(self.ncomp)
@@ -172,7 +175,23 @@ class HDPNormalMixture(DPNormalMixture):
         # multiGPU init
         if self.gpu:
             self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)
-        
+        if self.parallel:
+            self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
+            self.work_queue = multiprocessing.Queue()
+            self.result_queue = multiprocessing.Queue()
+            self.workers = [ CPUWorker(np.zeros((1,1)), self.gamma, self.mu_prior_mean, 
+                                       self._Phi0, self._nu0, self.work_queue, self.result_queue)
+                             for i in xrange(self.num_cores) ]
+            for thd in self.workers:
+                thd.set_data(self.data_shared_mem, sum(self.nobs), self.ndim)
+
+    def __del__(self):
+        if self.parallel:
+            for thd in self.workers:
+                thd.terminate()
+        if self.gpu:
+            for thd in self.gpu_workers:
+                thd.terminate()
 
     def sample(self, niter=1000, nburn=5000, thin=1, tune_interval=100, ident=False):
         """
@@ -189,7 +208,11 @@ class HDPNormalMixture(DPNormalMixture):
             else:
                 print "starting MCMC"
         if self.gpu:
-            for w in self.gpu_workers:
+            #for w in self.gpu_workers:
+            #    w.start()
+            start_GPUWorkers(self.gpu_workers)
+        if self.parallel:
+            for w in self.workers:
                 w.start()
 
         self._ident = ident
@@ -213,18 +236,20 @@ class HDPNormalMixture(DPNormalMixture):
             labels, zhat = self._update_labels(mu, Sigma, weights)
             ## Get initial reference if needed
             if i==-nburn and ident:
-                zref = np.zeros(np.sum(self.nobs), dtype=np.double)
+                zref = []
                 for ii in xrange(self.ngroups):
-                    zref[self.cumobs[ii]:self.cumobs[ii+1]] = zhat[ii].copy()
+                    zref.append(zhat[ii].copy())
                 c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
                 for j in xrange(self.ncomp):
-                    c0[j,:] = np.sum(zref==j)
+                    for ii in xrange(self.ngroups):
+                        c0[j,:] += np.sum(zref[ii]==j)
             ## update weights, masks
-            component_mask = np.zeros((sum(self.nobs), self.ncomp), dtype=np.bool)
+            component_mask = np.zeros((self.ncomp, sum(self.nobs)), dtype=np.bool)
             counts = []
+
             for ii in xrange(self.ngroups):
-                component_mask[self.cumobs[ii]:self.cumobs[ii+1]] = _get_mask(labels[ii], self.ncomp)
-                counts.append(component_mask[self.cumobs[ii]:self.cumobs[ii+1]].sum(1))
+                component_mask[:,self.cumobs[ii]:self.cumobs[ii+1]] = _get_mask(labels[ii], self.ncomp)
+                counts.append(component_mask[:,self.cumobs[ii]:self.cumobs[ii+1]].sum(1))
 
             stick_weights, weights = self._update_stick_weights(counts, beta, alpha0)
             stick_beta, beta = self._update_beta(stick_beta, beta, stick_weights, alpha0, alpha)
@@ -237,8 +262,8 @@ class HDPNormalMixture(DPNormalMixture):
             ## Relabel
             if ident:
                 cost = c0.copy()
-                for Z in zhat:
-                    _get_cost(zref, Z, cost)
+                for Z, Zr in zip(zhat, zref):
+                    _get_cost(Zr, Z, cost)
                 _, iii = np.where(munkres(cost))
                 beta = beta[iii]
                 weights = weights[:,iii]
@@ -257,6 +282,10 @@ class HDPNormalMixture(DPNormalMixture):
         self.stick_beta = stick_beta.copy()
         if self.gpu:
             kill_GPUWorkers(self.gpu_workers)
+        if self.parallel:
+            for ii in range(len(self.workers)):
+                self.work_queue.put(None)
+                
             
 
     def _setup_storage(self, niter=1000, thin=1):

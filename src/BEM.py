@@ -26,7 +26,7 @@ try:
         #inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
         #inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
         #gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
-        from multigpu import init_GPUWorkers, get_expected_labels_GPU, kill_GPUWorkers
+        from multigpu import init_GPUWorkers, get_expected_labels_GPU, kill_GPUWorkers, start_GPUWorkers
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
         _has_gpu=False
@@ -82,6 +82,14 @@ class BEM_DPNormalMixture(DPNormalMixture):
         self.e_labels = np.tile(self.weights.flatten(), (self.nobs, 1))
         self.densities = None
 
+    def __del__(self):
+        if self.parallel:
+            for thd in self.workers:
+                thd.terminate()
+        if self.gpu:
+            for thd in self.gpu_workers:
+                thd.terminate()
+
     def optimize(self, maxiter=1000, perdiff=0.1):
         """
         Optimizes the posterior distribution given the data. The
@@ -97,8 +105,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
         # start threads
         if self.gpu:
-            for w in self.gpu_workers:
-                w.start()
+            start_GPUWorkers(self.gpu_workers)
         if self.parallel:
             from multiprocessing import RawArray
             self.shared_dens_mem = RawArray('d', self.nobs*self.ncomp)
