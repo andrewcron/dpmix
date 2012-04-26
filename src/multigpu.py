@@ -3,17 +3,22 @@ Support for multi-GPU via threading for dpmix MCMC
 Written by: Andrew Cron
 """
 
-#import threading
-#import Queue
+import pycuda.driver as drv
+import gpustats
+import gpustats.sampler as gsamp
+import gpustats.util as gutil
+import cuda_functions as cufuncs
+from scikits.cuda import linalg as cuLA
+from pycuda import cumath
+from pycuda.elementwise import ElementwiseKernel
+iexp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
+import pycuda.tools as pytools
+
+
+from pycuda.gpuarray import to_gpu
 import multiprocessing
 import Queue as pQueue
 import numpy as np
-#import pycuda.autoinit
-import pycuda.driver as drv
-from pycuda.gpuarray import to_gpu
-#import gpustats
-#import gpustats.sampler
-#from cuda_functions import *
 
 ## WIERDNESS: libraries must be loaded inside of "run" and passed to
 ## functions to work properly ... 
@@ -26,9 +31,9 @@ class MCMC_Task(object):
         self.Sigma = Sigma
         self.relabel = relabel
 
-    def __call__(self, gdata, res_queue, g_ones_long=None,
-                 gpustats=None, gsamp=None, cufuncs=None, gutil=None,
-                 cuLA=None, cumath=None, iexp=None):
+    def __call__(self, gdata, res_queue, g_ones_long=None):
+        #gpustats=None, gsamp=None, cufuncs=None, gutil=None,
+         #        cuLA=None, cumath=None, iexp=None):
 
         densities = gpustats.mvnpdf_multi(gdata, self.mu, self.Sigma,
                                           weights = self.w.flatten(), get=False, logged=True,
@@ -51,9 +56,9 @@ class BEM_Task(object):
         self.Sigma = Sigma
         self._logmnflt = np.log(1e-37)
 
-    def __call__(self, gdata, res_queue, g_ones_long=None,
-                 gpustats=None, gsamp=None, cufuncs=None, gutil=None,
-                 cuLA=None, cumath=None, iexp=None):
+    def __call__(self, gdata, res_queue, g_ones_long=None):
+        #gpustats=None, gsamp=None, cufuncs=None, gutil=None,
+        #         cuLA=None, cumath=None, iexp=None):
 
         ncomp = len(self.w)
         nobs, ndims = gdata.shape
@@ -101,30 +106,18 @@ class GPUWorker(multiprocessing.Process):
         self.results = multiprocessing.Queue()
 
     def run(self):
+
+
         drv.init()
-        # imports must be done here ....
-        import pycuda.tools as pytools
+        _old_ctx = drv.Context.get_current()
+        if _old_ctx is not None:
+            _old_ctx.detach()
+        del _old_ctx
         pytools.clear_context_caches()
-        import gpustats
-        import gpustats.sampler as gsamp
-        import gpustats.util as gutil
-        import cuda_functions as cufuncs
-        from scikits.cuda import linalg as cuLA
-        from pycuda import cumath
-        from pycuda.elementwise import ElementwiseKernel
-        inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
 
-        ## some of these libraries initialize a context by default ... dumb
-        ctx = drv.Context.get_current()
-        if ctx is not None:
-            ctx = ctx.detach()
-            del ctx
+        self.dev = drv.Device(self.device)
+        self.ctx = self.dev.make_context()
 
-        try:
-            self.dev = drv.Device(self.device)
-        except:
-            raise ValueError("Unable to allocate device " + str(self.device) + "!")
-        self.ctx = self.dev.make_context()     
         cuLA.init()   
 
         #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
@@ -145,8 +138,8 @@ class GPUWorker(multiprocessing.Process):
 
             ## Execute Task
             #print 'device ' + str(self.device) + ' started computing'
-            task(self.gdata, self.results, self.g_ones_long, gpustats, gsamp,
-                 cufuncs, gutil, cuLA, cumath, inplace_exp)
+            task(self.gdata, self.results, self.g_ones_long) #gpustats, gsamp,
+                 #cufuncs, gutil, cuLA, cumath, inplace_exp)
 
             #self.dev_mem = drv.mem_get_info()
             #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
@@ -197,7 +190,10 @@ def start_GPUWorkers(workers):
             ## thread got hung up ... kill them all and raise exception
             for deadthd in workers:
                 deadthd.terminate()
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
             raise MemoryError("Bad things happened with GPU ... ")
+
     
             
 def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
