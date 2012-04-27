@@ -171,7 +171,11 @@ class DPNormalMixture(object):
     def __del__(self):
         if self.parallel:
             for thd in self.workers:
-                thd.terminate()
+                try:
+                    thd.terminate()
+                except AttributeError:
+                    pass
+                    
         if self.gpu:
             for thd in self.gpu_workers:
                 thd.terminate()
