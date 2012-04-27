@@ -14,6 +14,8 @@ import numpy as np
 from hdp import HDPNormalMixture
 import pylab
 
+import gpustats as gs
+
 if __name__ == '__main__':
 
     N = int(1e5)

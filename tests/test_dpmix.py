@@ -15,8 +15,9 @@ import pymc as pm
 from dpmix import DPNormalMixture
 from BEM import BEM_DPNormalMixture
 #from dpmix import DPNormalMixture, BEM_DPNormalMixture
-import pylab
+#import pylab
 
+import gpustats as gs
 
 #-------------------------------------------------------------------------------
 # Generate MV normal mixture
@@ -119,10 +120,10 @@ if __name__ == '__main__':
     mu = ident_mcmc.mu
     print mu[-1]
     print ident_mcmc.weights[-1]
-    pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
-    pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
+#    pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
+#    pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
     mu = bem.mu
-    pylab.scatter(mu[:,0],mu[:,1], c='g')
+    #pylab.scatter(mu[:,0],mu[:,1], c='g')
 #    mu = mcmc.mu
 #    pylab.scatter(mu[:,:,0],mu[:,:,1], c='cyan')
-    pylab.show()
+    #pylab.show()
