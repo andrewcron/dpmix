@@ -20,6 +20,8 @@ import multiprocessing
 import Queue as pQueue
 import numpy as np
 
+import sys; import os
+
 ## WIERDNESS: libraries must be loaded inside of "run" and passed to
 ## functions to work properly ... 
 
@@ -111,7 +113,11 @@ class GPUWorker(multiprocessing.Process):
         drv.init()
         _old_ctx = drv.Context.get_current()
         if _old_ctx is not None:
+            _old_cerr = os.dup(sys.stderr.fileno())
+            _nl = os.open(os.devnull, os.O_RDWR)
+            os.dup2(_nl, sys.stderr.fileno())
             _old_ctx.detach()
+            sys.stderr = os.fdopen(_old_cerr, "w")
         del _old_ctx
         pytools.clear_context_caches()
 
@@ -190,8 +196,6 @@ def start_GPUWorkers(workers):
             ## thread got hung up ... kill them all and raise exception
             for deadthd in workers:
                 deadthd.terminate()
-            sys.stdout = sys.__stdout__
-            sys.stderr = sys.__stderr__
             raise MemoryError("Bad things happened with GPU ... ")
 
     
