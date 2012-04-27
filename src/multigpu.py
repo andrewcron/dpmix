@@ -110,20 +110,7 @@ class GPUWorker(multiprocessing.Process):
     def run(self):
 
 
-        drv.init()
-        _old_ctx = drv.Context.get_current()
-        if _old_ctx is not None:
-            _old_cerr = os.dup(sys.stderr.fileno())
-            _nl = os.open(os.devnull, os.O_RDWR)
-            os.dup2(_nl, sys.stderr.fileno())
-            _old_ctx.detach()
-            sys.stderr = os.fdopen(_old_cerr, "w")
-        del _old_ctx
-        pytools.clear_context_caches()
-
-        self.dev = drv.Device(self.device)
-        self.ctx = self.dev.make_context()
-
+        gutil.threadSafeInit(self.device)
         cuLA.init()   
 
         #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
@@ -155,10 +142,10 @@ class GPUWorker(multiprocessing.Process):
         self.g_ones_long.gpudata.free()
         del self.gdata
         del self.g_ones_long
+        gutil.clean_all_contexts() 
         #print 'killed thread ' + str(self.device)
         #print 'available mem ' + str(drv.mem_get_info())
-        self.ctx.detach()
-        del self.ctx
+
         ## put None in results to indicate destruction ... forces block
         self.results.put(None)
 
