@@ -1,5 +1,6 @@
-import pycuda.autoinit
 import pycuda.driver as drv
+if drv.Context.get_current() is None:
+    import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 import os.path as pth
