@@ -101,6 +101,8 @@ class HDPNormalMixture(DPNormalMixture):
                         self.dev_list = np.asarray(np.abs(gpu), dtype=np.int)
                         if self.dev_list.shape == ():
                             self.dev_list.shape = 1
+                else:
+                    self.gpu=True
             else:
                 self.gpu = False
 
