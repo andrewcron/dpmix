@@ -100,6 +100,10 @@ def stick_break_proc(beta_a, beta_b, size=None):
     else:
         assert(size is not None)
 
+    # check for zeros ... 
+    beta_a[beta_a<1e-10] = 1e-10
+    beta_b[beta_b<1e-10] = 1e-10
+
     dist = stats.beta(beta_a, beta_b)
     V = stick_weights = dist.rvs(size)
     #check for bad values and deal with adhoc
