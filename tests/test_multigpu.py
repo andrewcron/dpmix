@@ -36,10 +36,11 @@ if __name__ == '__main__':
         Sigma[i] = np.identity(J)
     #import pdb; pdb.set_trace()
     workers = multigpu.init_GPUWorkers(data, gpus)
-    multigpu.start_GPUWorkers(workers)
+    #import pdb; pdb.set_trace()
+
     starttime = time.time()
-    for i in xrange(50):
-        if i % 5 == 0:
+    for i in xrange(50000):
+        if i % 100 == 0:
             print i
         ll, ct, xbar, dens = multigpu.get_expected_labels_GPU(workers, w, mu, Sigma)
         labels = multigpu.get_labelsGPU(workers, w, mu, Sigma, True)

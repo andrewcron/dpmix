@@ -3,27 +3,9 @@ Support for multi-GPU via threading for dpmix MCMC
 Written by: Andrew Cron
 """
 
-import pycuda.driver as drv
-import gpustats
-import gpustats.sampler as gsamp
-import gpustats.util as gutil
-import cuda_functions as cufuncs
-from scikits.cuda import linalg as cuLA
-from pycuda import cumath
-from pycuda.elementwise import ElementwiseKernel
-iexp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
-import pycuda.tools as pytools
-
-
-from pycuda.gpuarray import to_gpu
-import multiprocessing
-import Queue as pQueue
+from mpi4py import MPI
 import numpy as np
-
 import sys; import os
-
-## WIERDNESS: libraries must be loaded inside of "run" and passed to
-## functions to work properly ... 
 
 ########### Multi GPU ##########################
 class MCMC_Task(object):
@@ -33,124 +15,30 @@ class MCMC_Task(object):
         self.Sigma = Sigma
         self.relabel = relabel
 
-    def __call__(self, gdata, res_queue, g_ones_long=None):
-        #gpustats=None, gsamp=None, cufuncs=None, gutil=None,
-         #        cuLA=None, cumath=None, iexp=None):
-
-        densities = gpustats.mvnpdf_multi(gdata, self.mu, self.Sigma,
-                                          weights = self.w.flatten(), get=False, logged=True,
-                                          order='C')
-
-        labs = gsamp.sample_discrete(densities, logged=True)
-        if self.relabel:
-            Z = cufuncs.gpu_apply_row_max(densities)[1].get()
-        else:
-            Z = None
-        res_queue.put([labs.copy(), Z])
-        densities.gpudata.free()
-        del densities
-        
 class BEM_Task(object):
 
     def __init__(self, w, mu, Sigma):
         self.w = w
         self.mu = mu
         self.Sigma = Sigma
-        self._logmnflt = np.log(1e-37)
 
-    def __call__(self, gdata, res_queue, g_ones_long=None):
-        #gpustats=None, gsamp=None, cufuncs=None, gutil=None,
-        #         cuLA=None, cumath=None, iexp=None):
+class Init_Task(object):
 
-        ncomp = len(self.w)
-        nobs, ndims = gdata.shape
-        g_ones = to_gpu(np.ones((ncomp, 1), dtype=np.float32))
-
-        densities = gpustats.mvnpdf_multi(gdata, self.mu, self.Sigma,
-                                          weights = self.w.flatten(), get=False, logged=True)
-        tdens = gutil.GPUarray_reshape(densities, (ncomp, nobs), "C")
-        ll = cuLA.dot(g_ones, cumath.exp(tdens), "T").get()
-        nmzero = np.sum(ll==0)
-        ll = np.sum(np.log(ll[ll>0])) + nmzero*self._logmnflt
-
-        nrm, _ = cufuncs.gpu_apply_row_max(densities)
-        cufuncs.gpu_sweep_col_diff(densities, nrm)
-        iexp(densities); gutil.GPUarray_order(densities, "F")
-        nrm = cuLA.dot(g_ones, tdens, "T")
-        cufuncs.gpu_sweep_col_div(densities, nrm)
-
-        ct = cuLA.dot(tdens, g_ones_long).get().flatten()
-        xbar = cuLA.dot(tdens, gdata).get()
-        h_densities = densities.get()
-
-        res = (ll, ct, xbar, h_densities)
-        res_queue.put(res)
-        ## Free Everything
-        g_ones.gpudata.free()
-        densities.gpudata.free()
-        nrm.gpudata.free()
-
-        
-#class GPUWorker(threading.Thread):
-class GPUWorker(multiprocessing.Process):
-
-    def __init__(self, data, device):
-        #threading.Thread.__init__(self)
-        multiprocessing.Process.__init__(self)
-
+    def __init__(self, data, dev_num):
         self.data = data
-        self.device = device
-        self.nobs, self.ndim = data.shape
+        self.dev_num = dev_num
+
+class Dens_Task(object):
+
+    def __init__(self):
+        pass
         
-        #self.params = Queue.Queue()
-        #self.results = Queue.Queue()
-        self.params = multiprocessing.Queue()
-        self.results = multiprocessing.Queue()
-
-    def run(self):
-
-
-        gutil.threadSafeInit(self.device)
-        cuLA.init()   
-
-        #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
-        
-        ## load my portion of data to gpu
-        self.gdata = to_gpu(np.asarray(self.data, dtype=np.float32))
-        self.g_ones_long = to_gpu(np.ones((self.nobs,1), dtype=np.float32))
-
-        ## put empty object in result queue to indicate readiness
-        self.results.put(None)
-
-        ## gets tasks from params queue and puts labels in results queue .. killed
-        ## with None poison pill
-        while True:
-            task = self.params.get()
-            if task is None:
-                break
-
-            ## Execute Task
-            #print 'device ' + str(self.device) + ' started computing'
-            task(self.gdata, self.results, self.g_ones_long) #gpustats, gsamp,
-                 #cufuncs, gutil, cuLA, cumath, inplace_exp)
-
-            #self.dev_mem = drv.mem_get_info()
-            #print 'mem situation device ' + str(self.device) + ' ' + str(drv.mem_get_info())
-            #self.params.task_done()
-
-        self.gdata.gpudata.free()
-        self.g_ones_long.gpudata.free()
-        del self.gdata
-        del self.g_ones_long
-        gutil.clean_all_contexts() 
-        #print 'killed thread ' + str(self.device)
-        #print 'available mem ' + str(drv.mem_get_info())
-
-        ## put None in results to indicate destruction ... forces block
-        self.results.put(None)
-
-
 def init_GPUWorkers(data, devslist=None):
+    worker_file = os.path.dirname(__file__) + os.sep + 'gpuworker.py'
+    ndev = len(devslist)
+    if type(data)==list:
+        ndev = len(data)
+    workers = MPI.COMM_SELF.Spawn(sys.executable, args=[worker_file], maxprocs = ndev)
     ## dpmix and BEM
     if type(data) == np.ndarray:
         nobs, ndim = data.shape
@@ -161,103 +49,106 @@ def init_GPUWorkers(data, devslist=None):
         else:
             partitions[-1] = nobs
     
-    #launch threads
-        i=0; workers = []
-        for dev in devslist:
-            workers.append(GPUWorker(data[partitions[i]:partitions[i+1]], device=int(dev)))
+        #launch threads
+        for i in xrange(ndev):
+            task = Init_Task(data[partitions[i]:partitions[i+1]], int(devslist[i]))
+            workers.isend(task, dest=i, tag=11)
+            workers.recv(source=i, tag=13)
+
             i+=1
     else: ## HDP .. one or more datasets per GPU
-        ndev = len(devslist)
-        i=0; workers = []
-        for dt in data:
-            workers.append(GPUWorker(dt, device=int(devslist[i%ndev])))
-            i += 1
+        for i in xrange(ndev):
+            task = Init_Task(data[i], int(devslist[i%ndev]))
+            workers.isend(task, dest=i, tag=11)
+            workers.recv(source=i, tag=13)
+
     return workers
 
-def start_GPUWorkers(workers):
-    for thd in workers:
-        thd.start()
-        try:
-            thd.results.get(timeout=60)
-        except pQueue.Empty:
-            ## thread got hung up ... kill them all and raise exception
-            for deadthd in workers:
-                deadthd.terminate()
-            raise MemoryError("Bad things happened with GPU ... ")
-
-    
-            
 def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
     labels = []; Z = [];
     #import pdb; pdb.set_trace()
-    i = 0
-    for thd in workers:
-        thd.params.put(MCMC_Task(w[i], mu, Sigma, relabel))
-        i += 1
-    for thd in workers:
-        res = thd.results.get()
-        labels.append(res[0])
-        Z.append(res[1])
+    ndev = workers.remote_group.size
+    for i in xrange(ndev):
+        theta = MCMC_Task(w[i], mu, Sigma, relabel)
+        workers.isend(theta, dest=i, tag=11)
+
+    for i in xrange(ndev):
+        theta = workers.recv(source=i, tag=13)
+        labels.append(theta.labs)
+        Z.append(theta.Z)
+
     return labels, Z 
 
 def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
     # run all the threads
+    ndev = workers.remote_group.size
     nobs, i = 0, 0
     partitions = [0]
     theta = MCMC_Task(w, mu, Sigma, relabel)
-    for thd in workers:
+    for i in xrange(ndev):
         # give new params
-        nobs += thd.nobs
-        partitions.append(nobs)
-        thd.params.put(theta)
+        workers.isend(theta, dest=i, tag=11)
     #gather the results
+    theta = []
+    for i in xrange(ndev):
+        theta.append(workers.recv(source=i, tag=13))
+        nobs += theta[-1].nobs
+        partitions.append(nobs)
+
     res = np.zeros(nobs, dtype=np.float32)
     if relabel:
         Z = res.copy()
     else:
         Z = None
-    for thd in workers:
-        labs = thd.results.get()
-        res[partitions[i]:partitions[i+1]] = labs[0]
+
+    for i in xrange(ndev):
+        res[partitions[i]:partitions[i+1]] = theta[i].labs
         if relabel:
-            Z[partitions[i]:partitions[i+1]] = labs[1]
-        i+=1
+            Z[partitions[i]:partitions[i+1]] = theta[i].Z
 
     return res, Z
 
 def get_expected_labels_GPU(workers, w, mu, Sigma):
     # run all the threads
+    ndev = workers.remote_group.size
     nobs, i = 0, 0
     partitions = [0]
-    task = BEM_Task(w, mu, Sigma)
-    for thd in workers:
+    theta = BEM_Task(w, mu, Sigma)
+    for i in xrange(ndev):
         # give new params
-        nobs += thd.nobs
-        partitions.append(nobs)
-        thd.params.put(task)
+        workers.isend(theta, dest=i, tag=11)
     #gather results
-    ncomp = len(w); ndim = workers[0].ndim
+    theta = []; 
+    for i in xrange(ndev):
+        theta.append(workers.recv(source=i, tag=13))
+        nobs += theta[-1].nobs
+        partitions.append(nobs)
+
+    ncomp = len(w); ndim = theta[0].ndim
     dens = np.zeros((nobs, ncomp), dtype=np.float32)
     xbar = np.zeros((ncomp, ndim), dtype=np.float32)
     ct = np.zeros(ncomp, dtype=np.float32)
     ll = 0
-    for thd in workers:
-        res = thd.results.get()
-        ll += res[0]
-        ct += res[1]
-        xbar += res[2]
-        dens[partitions[i]:partitions[i+1], :] = res[3].copy()
-        i+=1
+
+    for i in xrange(ndev):
+        ll += theta[i].ll
+        ct += theta[i].ct
+        xbar += theta[i].xbar
+        newdens = np.empty(theta[i].nobs*ncomp, dtype=np.float32)
+        workers.isend(Dens_Task(), dest=i, tag=11)
+        workers.Recv(newdens, source=i, tag=13)
+        dens[partitions[i]:partitions[i+1], :] = newdens.reshape(theta[i].nobs, ncomp)
         
     return ll, ct, xbar, dens
 
 def kill_GPUWorkers(workers):
-    for thd in workers:
-        thd.params.put(None)
-        try:
-            thd.results.get(timeout=60)
-        except pQueue.Empty:
-            thd.terminate()
+    #poison pill to each child 
+    ndev = workers.remote_group.size
+    msg = None
+    for i in xrange(ndev):
+        workers.isend(msg, dest=i, tag=11)
+    workers.Disconnect()
+
     
         
 
