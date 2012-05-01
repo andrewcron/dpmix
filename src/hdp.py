@@ -21,18 +21,8 @@ except ImportError:
 # check for gpustats compatability
 try:
     import pycuda
+    import pycuda.driver
     try:
-        # import gpustats
-        # import gpustats.sampler
-        # import pycuda.gpuarray as gpuarray
-        # from pycuda.gpuarray import to_gpu
-        # from pycuda import cumath
-        # from pycuda.elementwise import ElementwiseKernel
-        # from scikits.cuda import linalg as cuLA; cuLA.init()
-        # from cuda_functions import *
-        # inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
-        # inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
-        # gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
         from multigpu import init_GPUWorkers, kill_GPUWorkers, get_hdp_labels_GPU
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
