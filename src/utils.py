@@ -143,3 +143,25 @@ def break_sticks(V):
         prod *= 1 - V[k]
     pi[-1] = prod
     return pi
+
+
+#### Task Classes ####
+class MCMC_Task(object):
+    def __init__(self, w, mu, Sigma, relabel=False):
+        self.w = w
+        self.mu = mu
+        self.Sigma = Sigma
+        self.relabel = relabel
+
+class BEM_Task(object):
+
+    def __init__(self, w, mu, Sigma):
+        self.w = w
+        self.mu = mu
+        self.Sigma = Sigma
+
+class Init_Task(object):
+
+    def __init__(self, data, dev_num):
+        self.data = data
+        self.dev_num = dev_num

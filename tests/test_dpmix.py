@@ -15,7 +15,6 @@ import pymc as pm
 from dpmix import DPNormalMixture
 from BEM import BEM_DPNormalMixture
 #from dpmix import DPNormalMixture, BEM_DPNormalMixture
-#import pylab
 
 import gpustats as gs
 

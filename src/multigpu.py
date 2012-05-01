@@ -6,33 +6,16 @@ Written by: Andrew Cron
 from mpi4py import MPI
 import numpy as np
 import sys; import os
+from utils import BEM_Task, MCMC_Task, Init_Task
 
 ########### Multi GPU ##########################
-class MCMC_Task(object):
-    def __init__(self, w, mu, Sigma, relabel=False):
-        self.w = w
-        self.mu = mu
-        self.Sigma = Sigma
-        self.relabel = relabel
-
-class BEM_Task(object):
-
-    def __init__(self, w, mu, Sigma):
-        self.w = w
-        self.mu = mu
-        self.Sigma = Sigma
-
-class Init_Task(object):
-
-    def __init__(self, data, dev_num):
-        self.data = data
-        self.dev_num = dev_num
 
 def init_GPUWorkers(data, devslist=None):
     worker_file = os.path.dirname(__file__) + os.sep + 'gpuworker.py'
     ndev = len(devslist)
     if type(data)==list:
         ndev = len(data)
+
     workers = MPI.COMM_SELF.Spawn(sys.executable, args=[worker_file], maxprocs = ndev)
     ## dpmix and BEM
     if type(data) == np.ndarray:

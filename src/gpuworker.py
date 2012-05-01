@@ -16,7 +16,14 @@ iexp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
 import pycuda.tools as pytools
 from pycuda.gpuarray import to_gpu
 
-from multigpu import MCMC_Task, BEM_Task, Init_Task
+import sys; import os;
+homepath = sys.path[0]
+if os.path.basename(homepath)=='dpmix':
+    sys.path[0] = os.path.dirname(sys.path[0])
+    from dpmix.utils import MCMC_Task, BEM_Task, Init_Task
+else:
+    from utils import MCMC_Task, BEM_Task, Init_Task
+
 
 comm = MPI.Comm.Get_parent()
 
@@ -37,10 +44,11 @@ while True:
             break
         time.sleep(0.001)
     task = comm.recv(source=0, tag=11)
+
     # process task or pill
     if task is None:
         break #poison pill 
-    elif type(task) == Init_Task:
+    elif isinstance(task, Init_Task):
         gutil.threadSafeInit(task.dev_num)
         cuLA.init()
         gdata = to_gpu(np.asarray(task.data, dtype=np.float32))
@@ -48,7 +56,7 @@ while True:
         g_ones_long = to_gpu(np.ones((nobs,1), dtype=np.float32))
         task = None
         comm.send(task, dest=0, tag=13)
-    elif type(task) == MCMC_Task:
+    elif isinstance(task, MCMC_Task):
         ## do GPU work ... 
         densities = gpustats.mvnpdf_multi(gdata, task.mu, task.Sigma,
                                           weights = task.w.flatten(), get=False, logged=True,
@@ -70,7 +78,7 @@ while True:
         del densities
         comm.send(task, dest=0, tag=13) # return it
 
-    elif type(task) == BEM_Task:
+    elif isinstance(task, BEM_Task):
 
         ncomp = len(task.w)
         g_ones = to_gpu(np.ones((ncomp, 1), dtype=np.float32))
