@@ -21,7 +21,7 @@ if __name__ == '__main__':
     K = 2
     J = 2
     ncomps = 4
-    gpus = [2,3,4]
+    gpus = [2,3,2,3]
     true_labels, data = generate_data(n=N, k=K, ncomps=3)
     data = data - data.mean(0)
     data = data/data.std(0)

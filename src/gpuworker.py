@@ -28,6 +28,7 @@ comm = MPI.Comm.Get_parent()
 
 # MPI Tag Key:
 # 11 -- new task
+# 12 -- ctypes streams
 # 13 -- completed task
 
 gdata = None
@@ -50,9 +51,12 @@ while True:
     elif isinstance(task, Init_Task):
         gutil.threadSafeInit(task.dev_num)
         cuLA.init()
-        gdata = to_gpu(np.asarray(task.data, dtype=np.float32))
-        data = task.data.copy()
-        nobs, ndim = task.data.shape
+        data = np.empty(task.nobs*task.ndim, dtype='d')
+        comm.Recv([data, MPI.DOUBLE], source=0, tag=12)
+        data = data.reshape(task.nobs, task.ndim)
+        gdata = to_gpu(np.asarray(data, dtype=np.float32))
+
+        nobs, ndim = data.shape
         g_ones_long = to_gpu(np.ones((nobs,1), dtype=np.float32))
         task = None
         comm.send(task, dest=0, tag=13)

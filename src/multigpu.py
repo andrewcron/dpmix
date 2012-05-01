@@ -29,15 +29,19 @@ def init_GPUWorkers(data, devslist=None):
     
         #launch threads
         for i in xrange(ndev):
-            task = Init_Task(data[partitions[i]:partitions[i+1]], int(devslist[i]))
+            todat = np.asarray(data[partitions[i]:partitions[i+1]], dtype='d')
+            task = Init_Task(todat.shape[0], todat.shape[1], int(devslist[i]))
             workers.isend(task, dest=i, tag=11)
+            workers.Send([todat, MPI.DOUBLE], dest=i, tag=12)
             workers.recv(source=i, tag=13)
 
             i+=1
     else: ## HDP .. one or more datasets per GPU
         for i in xrange(ndev):
-            task = Init_Task(data[i], int(devslist[i%len(devslist)]))
+            todat = np.asarray(data[i], dtype='d')
+            task = Init_Task(todat.shape[0], todat.shape[1], int(devslist[i%len(devslist)]))
             workers.isend(task, dest=i, tag=11)
+            workers.Send([todat, MPI.DOUBLE], dest=i, tag=12)
             workers.recv(source=i, tag=13)
 
     return workers

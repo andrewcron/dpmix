@@ -162,6 +162,7 @@ class BEM_Task(object):
 
 class Init_Task(object):
 
-    def __init__(self, data, dev_num):
-        self.data = data
+    def __init__(self, dim1, dim2, dev_num):
+        #self.data = data
+        self.nobs, self.ndim = dim1, dim2
         self.dev_num = dev_num
