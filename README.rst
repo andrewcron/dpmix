@@ -15,6 +15,7 @@ Requirements
 * PyCUDA
 * scikits.cuda
 * gpustats
+* mpi4py
 
 Installation and testing
 ------------------------
