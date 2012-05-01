@@ -6,15 +6,15 @@ Created on Mar 15, 2012
 '''
 import sys
 #sys.path.insert(0, '../build/lib.linux-x86_64-2.7/')
-#sys.path.insert(0, "../src")
+sys.path.insert(0, "../src")
 
 import numpy as np
 import numpy.random as npr
 import pymc as pm
 #
-#from dpmix import DPNormalMixture
-#from BEM import BEM_DPNormalMixture
-from dpmix import DPNormalMixture, BEM_DPNormalMixture
+from dpmix import DPNormalMixture
+from BEM import BEM_DPNormalMixture
+#from dpmix import DPNormalMixture, BEM_DPNormalMixture
 
 import gpustats as gs
 
@@ -47,7 +47,7 @@ if __name__ == '__main__':
         use_gpu = int(options.gpu)
     verbosity = int(options.verbose)
 
-    N = int(1e6) # n data points per component
+    N = int(1e5) # n data points per component
     K = 2 # ndim
     ncomps = 3 # n mixture components
     npr.seed(datetime.now().microsecond)
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     #import pdb
     #pdb.set_trace()
     print "use_gpu=" + str(use_gpu)
-    mcmc = DPNormalMixture(data, ncomp=64, gpu=use_gpu, verbose=verbosity, 
+    mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
     mcmc.sample(1000,nburn=0)
     print mcmc.mu[-1]

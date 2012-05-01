@@ -82,11 +82,12 @@ while True:
 
         ncomp = len(task.w)
         g_ones = to_gpu(np.ones((ncomp, 1), dtype=np.float32))
-
         densities = gpustats.mvnpdf_multi(gdata, task.mu, task.Sigma,
                                           weights = task.w.flatten(), get=False, logged=True)
         tdens = gutil.GPUarray_reshape(densities, (ncomp, nobs), "C")
+
         ll = cuLA.dot(g_ones, cumath.exp(tdens), "T").get()
+
         nmzero = np.sum(ll==0)
         ll = np.sum(np.log(ll[ll>0])) + nmzero*_logmnflt
 
@@ -114,10 +115,8 @@ while True:
         densities.gpudata.free()
         nrm.gpudata.free()
 
-        #comm.Send(h_densities, dest=0, tag=12) # send the large dens w/ ctypes
         comm.send(task, dest=0, tag=13)
-    #elif type(task) == Dens_Task:
-    #    comm.Send(h_densities, dest=0, tag=13)
+
 
 ## the end 
 comm.Disconnect()
