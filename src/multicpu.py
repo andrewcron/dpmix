@@ -21,16 +21,19 @@ class CPUWorker(multiprocessing.Process):
 
     def set_dens(self, shared_dens):
         self.dens = np.frombuffer(shared_dens).reshape(self.nobs, self.ncomp)
+
     def set_data(self, shared_data, nobs, ndim):
         self.data = np.frombuffer(shared_data).reshape(nobs, ndim)
         self.nobs, self.ndim = nobs, ndim
 
     def run(self):
+
         while True:
             new_work = self.task_queue.get()
             if new_work is None:
                 break # poison pill
-            if type(new_work) == CompUpdate:
+
+            if isinstance(new_work, CompUpdate):
                 new_work(self.data, self.gamma, self.mu_prior_mean, self.Phi0, self.nu0)
             else:
                 new_work(self.data, self.gamma, self.mu_prior_mean, 

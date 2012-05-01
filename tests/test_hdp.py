@@ -4,15 +4,15 @@ Creaded on Mar 21, 2012
 @author: Andrew Cron
 '''
 
-import sys
-sys.path.append('../src')
 
-from test_dpmix import *
+import sys
+sys.path.insert(0,'../src')
+
+from test_help import *
 
 import numpy as np
 
 from hdp import HDPNormalMixture
-import pylab
 
 #import gpustats as gs
 
