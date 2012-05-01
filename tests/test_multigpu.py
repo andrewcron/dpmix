@@ -36,10 +36,10 @@ if __name__ == '__main__':
         Sigma[i] = np.identity(J)
     #import pdb; pdb.set_trace()
     workers = multigpu.init_GPUWorkers(data, gpus)
-    #import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
 
     starttime = time.time()
-    for i in xrange(50000):
+    for i in xrange(1000):
         if i % 100 == 0:
             print i
         ll, ct, xbar, dens = multigpu.get_expected_labels_GPU(workers, w, mu, Sigma)
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     ## make sure host GPU is ok ... 
     from pycuda.gpuarray import to_gpu 
     from pycuda.gpuarray import sum as gsum
-    test = to_gpu(np.ones(1000, dtype=np.int32))
+    test = to_gpu(np.ones(100000, dtype=np.int32))
     print gsum(test)
 
     multigpu.kill_GPUWorkers(workers)

@@ -41,7 +41,7 @@ try:
         # gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
         # import pycuda.driver as drv
         # drv.init()
-        from multigpu import init_GPUWorkers, get_labelsGPU, kill_GPUWorkers, start_GPUWorkers
+        from multigpu import init_GPUWorkers, get_labelsGPU, kill_GPUWorkers
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
         _has_gpu=False
@@ -164,22 +164,7 @@ class DPNormalMixture(object):
             self.workers = [ CPUWorker(self.data, self.gamma, self.mu_prior_mean, 
                                        self._Phi0, self._nu0, self.work_queue, self.result_queue)
                              for i in xrange(self.num_cores) ]
-        ## multiGPU stuff
-        if self.gpu:
-            self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)
         
-    def __del__(self):
-        if self.parallel:
-            for thd in self.workers:
-                try:
-                    thd.terminate()
-                except AttributeError:
-                    pass
-                    
-        if self.gpu:
-            for thd in self.gpu_workers:
-                thd.terminate()
-
     def _set_initial_values(self, alpha0, nu0, Phi0, mu0, Sigma0, weights0,
                             e0, f0):
         if nu0 is None:
@@ -236,8 +221,9 @@ class DPNormalMixture(object):
         if self.parallel:
             for w in self.workers:
                 w.start()
+
         if self.gpu:
-            start_GPUWorkers(self.gpu_workers)
+            self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)
 
         alpha = self._alpha0
         weights = self._weights0

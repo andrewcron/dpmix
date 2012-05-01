@@ -26,7 +26,7 @@ try:
         #inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
         #inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
         #gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
-        from multigpu import init_GPUWorkers, get_expected_labels_GPU, kill_GPUWorkers, start_GPUWorkers
+        from multigpu import init_GPUWorkers, get_expected_labels_GPU, kill_GPUWorkers
         from multicpu import BEMSigmaUpdate
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
@@ -87,9 +87,9 @@ class BEM_DPNormalMixture(DPNormalMixture):
         if self.parallel:
             for thd in self.workers:
                 thd.terminate()
-        if self.gpu:
-            for thd in self.gpu_workers:
-                thd.terminate()
+        #if self.gpu:
+        #    if hasattr(self, 'gpu_workers'):
+        #        kill_GPUWorkers(self.gpu_workers)
 
     def optimize(self, maxiter=1000, perdiff=0.1):
         """
@@ -104,9 +104,6 @@ class BEM_DPNormalMixture(DPNormalMixture):
         #    self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
         #    self.g_ones_long = to_gpu(np.ones((self.nobs, 1), dtype=np.float32))
 
-        # start threads
-        if self.gpu:
-            start_GPUWorkers(self.gpu_workers)
         if self.parallel:
             from multiprocessing import RawArray
             self.shared_dens_mem = RawArray('d', self.nobs*self.ncomp)
@@ -114,7 +111,10 @@ class BEM_DPNormalMixture(DPNormalMixture):
             for w in self.workers:
                 w.set_dens(self.shared_dens_mem)
                 w.start()
-                
+
+        # start threads
+        if self.gpu:
+            self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)                
 
 
         self.expected_labels()

@@ -104,9 +104,6 @@ if __name__ == '__main__':
     #import pdb
     #pdb.set_trace()
     print "use_gpu=" + str(use_gpu)
-    mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity)#, mu0=mu0)
-    mcmc.sample(100,nburn=0)
-    #pdb.set_trace()
     mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
     mcmc.sample(1000,nburn=0)
@@ -118,16 +115,8 @@ if __name__ == '__main__':
 
     ident_mcmc = DPNormalMixture(bem, verbose=verbosity)
     ident_mcmc.sample(100, nburn=0, ident=False)
+    print ident_mcmc.weights[-1]
+    print ident_mcmc.mu[-1]
 
-    #pdb.set_trace()
-    print ident_mcmc.weights[-1]
-    mu = ident_mcmc.mu
-    print mu[-1]
-    print ident_mcmc.weights[-1]
-#    pylab.scatter(data[:,0], data[:,1], s=1, edgecolors='none')
-#    pylab.scatter(mu[:,:,0],mu[:,:,1], c='r')
-    mu = bem.mu
-    #pylab.scatter(mu[:,0],mu[:,1], c='g')
-#    mu = mcmc.mu
-#    pylab.scatter(mu[:,:,0],mu[:,:,1], c='cyan')
-    #pylab.show()
+
+

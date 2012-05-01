@@ -33,7 +33,7 @@ try:
         # inplace_exp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
         # inplace_sqrt = ElementwiseKernel("float *z", "z[i]=sqrtf(z[i])", "inplsqrt")
         # gpu_copy = ElementwiseKernel("float *x, float *y", "x[i]=y[i]", "copyarraygpu")
-        from multigpu import init_GPUWorkers, kill_GPUWorkers, get_hdp_labels_GPU, start_GPUWorkers
+        from multigpu import init_GPUWorkers, kill_GPUWorkers, get_hdp_labels_GPU
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
         _has_gpu=False
@@ -174,9 +174,7 @@ class HDPNormalMixture(DPNormalMixture):
         self.alldata = np.frombuffer(self.data_shared_mem).reshape(sum(self.nobs), self.ndim)
         for i in xrange(self.ngroups):
             self.alldata[self.cumobs[i]:self.cumobs[i+1],:] = self.data[i].copy()
-        # multiGPU init
-        if self.gpu:
-            self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)
+
         if self.parallel:
             self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
             self.work_queue = multiprocessing.Queue()
@@ -186,14 +184,6 @@ class HDPNormalMixture(DPNormalMixture):
                              for i in xrange(self.num_cores) ]
             for thd in self.workers:
                 thd.set_data(self.data_shared_mem, sum(self.nobs), self.ndim)
-
-    def __del__(self):
-        if self.parallel:
-            for thd in self.workers:
-                thd.terminate()
-        if self.gpu:
-            for thd in self.gpu_workers:
-                thd.terminate()
 
     def sample(self, niter=1000, nburn=100, thin=1, tune_interval=100, ident=False):
         """
@@ -209,10 +199,10 @@ class HDPNormalMixture(DPNormalMixture):
                 print "starting GPU enabled MCMC"
             else:
                 print "starting MCMC"
+        # multiGPU init
         if self.gpu:
-            #for w in self.gpu_workers:
-            #    w.start()
-            start_GPUWorkers(self.gpu_workers)
+            self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)
+
         if self.parallel:
             for w in self.workers:
                 w.start()
@@ -304,13 +294,7 @@ class HDPNormalMixture(DPNormalMixture):
         zhat = []
         if self.gpu:
             return get_hdp_labels_GPU(self.gpu_workers, weights, mu, Sigma, self._ident)
-            # for j in xrange(self.ngroups):
-            #     densities = gpustats.mvnpdf_multi(self.gdata[j], mu, Sigma,
-            #                                       weights=weights[j].flatten(),
-            #                                       get=False, logged=True, order='C')
-            #     if self._ident:
-            #         zhat[self.cumobs[j]:self.cumobs[j+1]] = gpu_apply_row_max(densities)[1].get()
-            #     labels[j] = gpustats.sampler.sample_discrete(densities, logged=True)
+
         else:
             labels = [np.zeros(self.nobs[j]) for j in range(self.ngroups)]
             for j in xrange(self.ngroups):

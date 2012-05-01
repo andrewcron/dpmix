@@ -28,11 +28,6 @@ class Init_Task(object):
         self.data = data
         self.dev_num = dev_num
 
-class Dens_Task(object):
-
-    def __init__(self):
-        pass
-        
 def init_GPUWorkers(data, devslist=None):
     worker_file = os.path.dirname(__file__) + os.sep + 'gpuworker.py'
     ndev = len(devslist)
@@ -134,10 +129,7 @@ def get_expected_labels_GPU(workers, w, mu, Sigma):
         ll += theta[i].ll
         ct += theta[i].ct
         xbar += theta[i].xbar
-        newdens = np.empty(theta[i].nobs*ncomp, dtype=np.float32)
-        workers.isend(Dens_Task(), dest=i, tag=11)
-        workers.Recv(newdens, source=i, tag=13)
-        dens[partitions[i]:partitions[i+1], :] = newdens.reshape(theta[i].nobs, ncomp)
+        dens[partitions[i]:partitions[i+1], :] = theta[i].dens
         
     return ll, ct, xbar, dens
 

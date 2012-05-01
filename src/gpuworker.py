@@ -16,7 +16,7 @@ iexp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
 import pycuda.tools as pytools
 from pycuda.gpuarray import to_gpu
 
-from multigpu import MCMC_Task, BEM_Task, Init_Task, Dens_Task
+from multigpu import MCMC_Task, BEM_Task, Init_Task
 
 comm = MPI.Comm.Get_parent()
 
@@ -31,7 +31,7 @@ _logmnflt = np.log(1e-37)
 
 ### Code needs to be moved out of tasks ... pretty sure ...
 while True:
-    # get task ...
+    # get task ... manual wait to decrease CPU impact 2% load
     while True:
         if comm.Iprobe(source=0, tag=11):
             break
@@ -98,6 +98,7 @@ while True:
         task.xbar = xbar
         task.nobs = nobs
         task.ndim = ndim
+        task.dens = h_densities
         del task.mu, task.Sigma, task.w
 
         ## Free Everything
@@ -107,8 +108,8 @@ while True:
 
         #comm.Send(h_densities, dest=0, tag=12) # send the large dens w/ ctypes
         comm.send(task, dest=0, tag=13)
-    elif type(task) == Dens_Task:
-        comm.Send(h_densities, dest=0, tag=13)
+    #elif type(task) == Dens_Task:
+    #    comm.Send(h_densities, dest=0, tag=13)
 
 ## the end 
 comm.Disconnect()
