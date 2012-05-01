@@ -36,7 +36,7 @@ def init_GPUWorkers(data, devslist=None):
             i+=1
     else: ## HDP .. one or more datasets per GPU
         for i in xrange(ndev):
-            task = Init_Task(data[i], int(devslist[i%ndev]))
+            task = Init_Task(data[i], int(devslist[i%len(devslist)]))
             workers.isend(task, dest=i, tag=11)
             workers.recv(source=i, tag=13)
 
@@ -107,7 +107,7 @@ def get_expected_labels_GPU(workers, w, mu, Sigma):
     xbar = np.zeros((ncomp, ndim), dtype=np.float32)
     ct = np.zeros(ncomp, dtype=np.float32)
     ll = 0
-
+    #import pdb; pdb.set_trace()
     for i in xrange(ndev):
         ll += theta[i].ll
         ct += theta[i].ct

@@ -12,7 +12,6 @@ import cuda_functions as cufuncs
 from scikits.cuda import linalg as cuLA
 from pycuda import cumath
 from pycuda.elementwise import ElementwiseKernel
-iexp = ElementwiseKernel("float *z", "z[i]=expf(z[i])", "inplexp")
 import pycuda.tools as pytools
 from pycuda.gpuarray import to_gpu
 
@@ -35,7 +34,7 @@ gdata = None
 g_ones_long = None
 
 _logmnflt = np.log(1e-37)
-
+iexp = ElementwiseKernel("float *z", "z[i] = (z[i] < -40.0) ? 0.0 : expf(z[i]);", "inplexp")
 ### Code needs to be moved out of tasks ... pretty sure ...
 while True:
     # get task ... manual wait to decrease CPU impact 2% load
@@ -52,6 +51,7 @@ while True:
         gutil.threadSafeInit(task.dev_num)
         cuLA.init()
         gdata = to_gpu(np.asarray(task.data, dtype=np.float32))
+        data = task.data.copy()
         nobs, ndim = task.data.shape
         g_ones_long = to_gpu(np.ones((nobs,1), dtype=np.float32))
         task = None
@@ -84,36 +84,59 @@ while True:
         g_ones = to_gpu(np.ones((ncomp, 1), dtype=np.float32))
         densities = gpustats.mvnpdf_multi(gdata, task.mu, task.Sigma,
                                           weights = task.w.flatten(), get=False, logged=True)
-        tdens = gutil.GPUarray_reshape(densities, (ncomp, nobs), "C")
+        # dens1 = densities.get()
+        # tdens = gutil.GPUarray_reshape(densities, (ncomp, nobs), "C")
 
-        ll = cuLA.dot(g_ones, cumath.exp(tdens), "T").get()
+        # ll = cuLA.dot(g_ones, cumath.exp(tdens), "T").get()
 
-        nmzero = np.sum(ll==0)
-        ll = np.sum(np.log(ll[ll>0])) + nmzero*_logmnflt
+        # nmzero = np.sum(ll==0)
+        # ll = np.sum(np.log(ll[(ll>0) * (~np.isinf(ll))])) + nmzero*_logmnflt
 
-        nrm, _ = cufuncs.gpu_apply_row_max(densities)
-        cufuncs.gpu_sweep_col_diff(densities, nrm)
-        iexp(densities); gutil.GPUarray_order(densities, "F")
-        nrm = cuLA.dot(g_ones, tdens, "T")
-        cufuncs.gpu_sweep_col_div(densities, nrm)
+        # nrm, _ = cufuncs.gpu_apply_row_max(densities)
+        # nrm1 = nrm.get()
+        # cufuncs.gpu_sweep_col_diff(densities, nrm)
+        # dens2 = densities.get()
+        # iexp(densities); gutil.GPUarray_order(densities, "F")
 
-        ct = cuLA.dot(tdens, g_ones_long).get().flatten()
-        xbar = cuLA.dot(tdens, gdata).get()
-        h_densities = densities.get()
+        # dens3 = densities.get()
+        # nrm = cuLA.dot(g_ones, tdens, "T")
+
+        # print densities.get().max()
+        # whr = np.where(np.isnan(densities.get())+np.isinf(densities.get()))[0]
+        # print dens1[whr,:]
+        # print nrm1[whr]
+        # print dens2[whr,:]
+        # print dens3[whr,:]
+        # cufuncs.gpu_sweep_col_div(densities, nrm)
+
+        # ct = cuLA.dot(tdens, g_ones_long).get().flatten()
+        # xbar = cuLA.dot(tdens, gdata).get()
+        # print (xbar.T / ct).T
+        # print ll
+        # h_densities = densities.get()
+
+        dens = np.asarray(densities.get(), dtype=np.float, order='C')
+        dens = np.exp(dens)
+        norm = dens.sum(1)
+        task.ll = np.sum(np.log(norm))
+        dens = (dens.T / norm).T
+        task.ct = dens.sum(0)
+        task.xbar = np.dot(dens.T, data)
+        task.dens = dens
 
         # store result in task
-        task.ll = ll
-        task.ct = ct
-        task.xbar = xbar
+        # task.ll = ll
+        # task.ct = ct
+        # task.xbar = xbar
         task.nobs = nobs
         task.ndim = ndim
-        task.dens = h_densities
+        # task.dens = h_densities
         del task.mu, task.Sigma, task.w
 
         ## Free Everything
-        g_ones.gpudata.free()
+        #g_ones.gpudata.free()
         densities.gpudata.free()
-        nrm.gpudata.free()
+        #nrm.gpudata.free()
 
         comm.send(task, dest=0, tag=13)
 
