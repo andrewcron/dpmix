@@ -49,6 +49,7 @@ while True:
     if task is None:
         break #poison pill 
     elif isinstance(task, Init_Task):
+        dev_num = task.dev_num
         gutil.threadSafeInit(task.dev_num)
         cuLA.init()
         data = np.empty(task.nobs*task.ndim, dtype='d')
@@ -60,6 +61,7 @@ while True:
         g_ones_long = to_gpu(np.ones((nobs,1), dtype=np.float32))
         task = None
         comm.send(task, dest=0, tag=13)
+        #print 'memory on dev ' + str(dev_num) + ': ' + str(drv.mem_get_info())
     elif isinstance(task, MCMC_Task):
         ## do GPU work ... 
         densities = gpustats.mvnpdf_multi(gdata, task.mu, task.Sigma,
@@ -81,6 +83,7 @@ while True:
         densities.gpudata.free()
         del densities
         comm.send(task, dest=0, tag=13) # return it
+        #print 'memory on dev ' + str(dev_num) + ': ' + str(drv.mem_get_info())
 
     elif isinstance(task, BEM_Task):
 
