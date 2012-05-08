@@ -91,6 +91,7 @@ class HDPNormalMixture(DPNormalMixture):
                         self.dev_list = np.asarray(np.abs(gpu), dtype=np.int)
                         if self.dev_list.shape == ():
                             self.dev_list.shape = 1
+                        self.dev_list = np.unique(self.dev_list)
                 else:
                     self.gpu=True
             else:
@@ -152,7 +153,7 @@ class HDPNormalMixture(DPNormalMixture):
             self.prop_scale = data.prop_scale.copy()
             self.gpu = data.gpu
             if self.gpu:
-                self.dev_list = data.dev_list
+                self.dev_list = np.unique(data.dev_list)
             self.parallel = data.parallel
 
         

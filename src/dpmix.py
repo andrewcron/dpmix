@@ -96,7 +96,7 @@ class DPNormalMixture(object):
             self.gamma = data.gamma
             self.gpu = data.gpu
             if self.gpu:
-                self.dev_list = data.dev_list
+                self.dev_list = np.unique(data.dev_list)
             self.parallel = data.parallel
         else:
             if _has_gpu:
@@ -109,9 +109,7 @@ class DPNormalMixture(object):
                         self.dev_list = np.asarray(np.abs(gpu), dtype=np.int)
                         if self.dev_list.shape == ():
                             self.dev_list.shape = 1
-                        ## MOVED TO MULTIGPU
-                        #if np.sum(self.dev_list >= drv.Device.count()):
-                        #    raise ValueError("We dont have that many devices on this machine.")             
+                        self.dev_list = np.unique(self.dev_list)
 		else:
 		    self.gpu = True
 	    else:

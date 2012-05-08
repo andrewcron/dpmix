@@ -21,7 +21,7 @@ if __name__ == '__main__':
     K = 2
     J = 2
     ncomps = 4
-    gpus = [2,3,2,3]
+    gpus = [2,3]
     true_labels, data = generate_data(n=N, k=K, ncomps=3)
     data = data - data.mean(0)
     data = data/data.std(0)
@@ -41,6 +41,7 @@ if __name__ == '__main__':
     for i in xrange(1000):
         if i % 100 == 0:
             print i
+        import pdb; pdb.set_trace()
         ll, ct, xbar, dens = multigpu.get_expected_labels_GPU(workers, w, mu, Sigma)
         labels = multigpu.get_labelsGPU(workers, w, mu, Sigma, True)
 
