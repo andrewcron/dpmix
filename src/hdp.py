@@ -75,7 +75,7 @@ class HDPNormalMixture(DPNormalMixture):
     """
 
     def __init__(self, data, ncomp=256, gamma0=10, m0=None,
-                 nu0=None, Phi0=None, e0=1, f0=1, g0=1, h0=1, 
+                 nu0=None, Phi0=None, e0=10, f0=1, g0=10, h0=1, 
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
                  gpu=None, parallel=False, verbose=False):
 
@@ -127,7 +127,7 @@ class HDPNormalMixture(DPNormalMixture):
             self._stick_beta0 = stats.beta.rvs(1,self._alpha0, size=self.ncomp-1)
             self._beta0 = break_sticks(self._stick_beta0)
             self._alpha00 = 1.0
-            self.e0, self.f0 = f0, g0
+            self.e0, self.f0 = g0, h0
             self.prop_scale = 0.05 * np.ones(self.ncomp)
             self.prop_scale[-1] = 1.
 
