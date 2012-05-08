@@ -141,26 +141,6 @@ class BEM_DPNormalMixture(DPNormalMixture):
     _logmnflt = np.log(1e-37)
     def expected_labels(self):
         if self.gpu:
-            # densities = gpustats.mvnpdf_multi(self.gdata, self.mu, self.Sigma, 
-            #                                   weights=self.weights.flatten(), 
-            #                                   get=False, logged=True)
-            # tdens = GPUarray_reshape(densities, (self.ncomp, self.nobs), "C")
-            # #tdens = densities.reshape(self.ncomp, self.nobs, "C")
-            # #import pdb; pdb.set_trace()
-            # self.ll = cuLA.dot(self.g_ones, cumath.exp(tdens), "T").get()
-            # nmzero = np.sum(self.ll==0)
-            # self.ll = np.sum(np.log(self.ll[self.ll>0])) + nmzero*self._logmnflt
-
-            # nrm, _ = gpu_apply_row_max(densities)
-            # gpu_sweep_col_diff(densities, nrm)
-            # inplace_exp(densities); GPUarray_order(densities, "F")
-            # nrm = cuLA.dot(self.g_ones, tdens, "T")
-            # gpu_sweep_col_div(densities, nrm)
-
-            # self.ct = cuLA.dot(tdens, self.g_ones_long).get().flatten()
-            # self.xbar = cuLA.dot(tdens, self.gdata).get()
-            # self.densities = densities
-
             self.ll, self.ct, self.xbar, self.densities = get_expected_labels_GPU(
                 self.gpu_workers, self.weights, self.mu, self.Sigma)
 
@@ -187,23 +167,6 @@ class BEM_DPNormalMixture(DPNormalMixture):
 
     def maximize_Sigma(self):
         df = self.ct + self._nu0 + 2*self.ndim + 3
-        # if self.gpu:
-        #     inplace_sqrt(self.densities); GPUarray_order(self.densities, "F")
-        #     #fltdens = self.densities.ravel()
-        #     fltdens = GPUarray_reshape(self.densities, self.densities.size)
-        #     self.xbar = (self.xbar.T / self.ct).T
-        #     for j in xrange(self.ncomp):
-        #         if self.ct[j]>0.1:
-        #             Xj_d = self.gdata._new_like_me(); gpu_copy(Xj_d, self.gdata);
-        #             cdens = fltdens[(j*self.nobs):((j+1)*self.nobs)]
-        #             gpu_sweep_row_diff(Xj_d, self.xbar[j,:].flatten())
-        #             gpu_sweep_col_mult(Xj_d, cdens)
-        #             SS = cuLA.dot(Xj_d, Xj_d, "T").get()
-        #             SS += self._Phi0[j] + (self.ct[j]/(1+self.gamma[j]*self.ct[j]))*np.outer(
-        #                 (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
-        #                 (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
-        #             self.Sigma[j] = SS / self.ct[j]
-        # else:
 
         ## multithread? 
         if self.parallel:

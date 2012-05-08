@@ -9,7 +9,6 @@ import gpustats
 import gpustats.sampler as gsamp
 import gpustats.util as gutil
 import cuda_functions as cufuncs
-from scikits.cuda import linalg as cuLA
 from pycuda import cumath
 from pycuda.elementwise import ElementwiseKernel
 import pycuda.tools as pytools
@@ -51,7 +50,6 @@ while True:
     elif isinstance(task, Init_Task):
         dev_num = task.dev_num
         gutil.threadSafeInit(task.dev_num)
-        cuLA.init()
         data = np.empty(task.nobs*task.ndim, dtype='d')
         comm.Recv([data, MPI.DOUBLE], source=0, tag=12)
         data = data.reshape(task.nobs, task.ndim)
@@ -91,36 +89,6 @@ while True:
         g_ones = to_gpu(np.ones((ncomp, 1), dtype=np.float32))
         densities = gpustats.mvnpdf_multi(gdata, task.mu, task.Sigma,
                                           weights = task.w.flatten(), get=False, logged=True)
-        # dens1 = densities.get()
-        # tdens = gutil.GPUarray_reshape(densities, (ncomp, nobs), "C")
-
-        # ll = cuLA.dot(g_ones, cumath.exp(tdens), "T").get()
-
-        # nmzero = np.sum(ll==0)
-        # ll = np.sum(np.log(ll[(ll>0) * (~np.isinf(ll))])) + nmzero*_logmnflt
-
-        # nrm, _ = cufuncs.gpu_apply_row_max(densities)
-        # nrm1 = nrm.get()
-        # cufuncs.gpu_sweep_col_diff(densities, nrm)
-        # dens2 = densities.get()
-        # iexp(densities); gutil.GPUarray_order(densities, "F")
-
-        # dens3 = densities.get()
-        # nrm = cuLA.dot(g_ones, tdens, "T")
-
-        # print densities.get().max()
-        # whr = np.where(np.isnan(densities.get())+np.isinf(densities.get()))[0]
-        # print dens1[whr,:]
-        # print nrm1[whr]
-        # print dens2[whr,:]
-        # print dens3[whr,:]
-        # cufuncs.gpu_sweep_col_div(densities, nrm)
-
-        # ct = cuLA.dot(tdens, g_ones_long).get().flatten()
-        # xbar = cuLA.dot(tdens, gdata).get()
-        # print (xbar.T / ct).T
-        # print ll
-        # h_densities = densities.get()
 
         dens = np.asarray(densities.get(), dtype=np.float, order='C')
         dens = np.exp(dens)
