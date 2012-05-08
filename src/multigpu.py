@@ -41,12 +41,13 @@ def init_GPUWorkers(data, devslist=None):
         ndata = len(data)
         for i in xrange(ndata):
             dev = int(devslist[i%len(devslist)])
+            thd = i%len(devslist)
             todat = np.asarray(data[i], dtype='d')
             task = Init_Task(todat.shape[0], todat.shape[1], dev)
-            workers.isend(task, dest=dev, tag=11)
-            workers.Send([todat, MPI.DOUBLE], dest=dev, tag=12)
-            _dataind[i] = workers.recv(source=dev, tag=13)
-            _datadevmap[i] = dev
+            workers.isend(task, dest=thd, tag=11)
+            workers.Send([todat, MPI.DOUBLE], dest=thd, tag=12)
+            _dataind[i] = workers.recv(source=thd, tag=13)
+            _datadevmap[i] = thd
 
     return workers
 
