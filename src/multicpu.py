@@ -63,60 +63,69 @@ class BEMSigmaUpdate(object):
     
 
 class CompUpdate(object):
-    def __init__(self, comp, labels, Sigma):
-        self.comp = comp
+    def __init__(self, comps, labels, Sigma):
+        self.comps = comps
         self.labels = labels
         self.Sigma = Sigma
 
     def __call__(self, data, gamma, mu_prior_mean, Phi0, nu0):
-        j = self.comp
+        self.new_Sigma = np.zeros_like(self.Sigma)
+        self.new_mu = np.zeros((self.Sigma.shape[0], self.Sigma.shape[1]), dtype=np.float)
         if isinstance(self.labels, list):
-            nobs = data.shape[0]
-            mask = np.zeros(nobs, dtype=np.bool)
-            self.count = np.zeros(len(self.labels), dtype=np.int)
-            cumobs = 0; ii = 0
-            for labs in self.labels:
-                submask = labs == self.comp
-                mask[cumobs:(cumobs+len(labs))] = submask
-                self.count[ii] = np.sum(submask); 
-                cumobs+=len(labs); ii+=1
+            self.count = np.zeros((len(self.labels), len(self.comps)), dtype=np.int)
         else:
-            mask = self.labels == self.comp
-            self.count = np.sum(mask)
+            self.count = np.zeros(len(self.comps), dtype=np.int)
+        jj = -1
 
-        Xj = data[mask]
-        nj, ndim = Xj.shape
+        for j in self.comps:
+            jj += 1
+            if isinstance(self.labels, list):
+                nobs = data.shape[0]
+                mask = np.zeros(nobs, dtype=np.bool)
+                cumobs = 0; ii = 0
+                for labs in self.labels:
+                    submask = labs == j
+                    mask[cumobs:(cumobs+len(labs))] = submask
+                    self.count[ii, jj] = np.sum(submask); 
+                    cumobs+=len(labs); ii+=1
+            else:
+                mask = self.labels == j
+                self.count[jj] = np.sum(mask)
 
-        sumxj = Xj.sum(0)
+            Xj = data[mask]
+            nj, ndim = Xj.shape
+            
+            sumxj = Xj.sum(0)
 
-        gam = gamma[j]
-        mu_hyper = mu_prior_mean
+            gam = gamma[j]
+            mu_hyper = mu_prior_mean
+                
+            post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
+            post_cov = 1 / (1 / gam + nj) * self.Sigma[jj]
 
-        post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
-        post_cov = 1 / (1 / gam + nj) * self.Sigma
+            new_mu = npr.multivariate_normal(post_mean, post_cov)
 
-        new_mu = npr.multivariate_normal(post_mean, post_cov)
+            Xj_demeaned = Xj - new_mu
 
-        Xj_demeaned = Xj - new_mu
+            mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
+            data_SS = np.dot(Xj_demeaned.T, Xj_demeaned)
+            post_Phi = data_SS + mu_SS + Phi0[j]
 
-        mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
-        data_SS = np.dot(Xj_demeaned.T, Xj_demeaned)
-        post_Phi = data_SS + mu_SS + Phi0[j]
+            # symmetrize
+            post_Phi = (post_Phi + post_Phi.T) / 2
 
-        # symmetrize
-        post_Phi = (post_Phi + post_Phi.T) / 2
+            # P(Sigma) ~ IW(nu + 2, nu * Phi)
+            # P(Sigma | theta, Y) ~
+            post_nu = nj + ndim + nu0 + 2
 
-        # P(Sigma) ~ IW(nu + 2, nu * Phi)
-        # P(Sigma | theta, Y) ~
-        post_nu = nj + ndim + nu0 + 2
-
-        # pymc rinverse_wishart takes
-        new_Sigma = invwishartrand_prec(post_nu, post_Phi)
+            # pymc rinverse_wishart takes
+            new_Sigma = invwishartrand_prec(post_nu, post_Phi)
+            # store new results
+            self.new_Sigma[jj] = new_Sigma
+            self.new_mu[jj] = new_mu
 
         del self.labels
         del self.Sigma
 
-        # store new results in class
-        self.new_Sigma = new_Sigma
-        self.new_mu = new_mu
+
 

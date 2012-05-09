@@ -133,7 +133,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
             kill_GPUWorkers(self.gpu_workers)
         if self.parallel:
             for i in xrange(self.num_cores):
-                self.work_queue.put(None)
+                self.work_queue[i].put(None)
                 
     def log_posterior(self):
         # just the log likelihood right now because im lazy ... 
@@ -172,11 +172,12 @@ class BEM_DPNormalMixture(DPNormalMixture):
         ## multithread? 
         if self.parallel:
             self.shared_dens[:] = self.densities
+            nthds = len(self.work_queue)
             for j in xrange(self.ncomp):
-                self.work_queue.put(BEMSigmaUpdate(self.ct, self.xbar, self.Sigma[j], j))
+                self.work_queue[j%nthds].put(BEMSigmaUpdate(self.ct, self.xbar, self.Sigma[j], j))
             num_jobs = self.ncomp
-            while num_jobs:
-                result = self.result_queue.get()
+            for j in xrange(self.ncomp):
+                result = self.result_queue[j%nthds].get()
                 j = result.comp
                 self.Sigma[j] = result.Sigma.copy()
                 num_jobs -= 1

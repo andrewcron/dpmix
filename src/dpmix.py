@@ -143,11 +143,18 @@ class DPNormalMixture(object):
         ## multiCPU stuf
         if self.parallel:
             self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
-            self.work_queue = multiprocessing.Queue()
-            self.result_queue = multiprocessing.Queue()
+            compsperdev = self.ncomp / self.num_cores
+            self.work_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
+            self.result_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
             self.workers = [ CPUWorker(self.data, self.gamma, self.mu_prior_mean, 
-                                       self._Phi0, self._nu0, self.work_queue, self.result_queue)
+                                       self._Phi0, self._nu0, self.work_queue[i], self.result_queue[i])
                              for i in xrange(self.num_cores) ]
+            self.compsdevmap = {}; cumcomps = 0
+            for i in xrange(self.num_cores):
+                self.compsdevmap[i] = [int(cumcomps), int(min(cumcomps+compsperdev, self.ncomp))]
+                cumcomps += compsperdev
+            self.compsdevmap[self.num_cores-1][1] = self.ncomp
+
         
     def _set_initial_values(self, alpha0, nu0, Phi0, mu0, Sigma0, weights0,
                             e0, f0):
@@ -218,13 +225,16 @@ class DPNormalMixture(object):
             else:
                 print "starting MCMC"
 
-        if ident:
-            labels, zref = self._update_labels(mu, Sigma, weights, True)
-            c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
-            for i in xrange(self.ncomp):
-                c0[i,:] = np.sum(zref==i)
-            zhat = zref.copy()
         for i in range(-nburn, niter):
+
+            if i==0 and ident:
+                labels, zref = self._update_labels(mu, Sigma, weights, True)
+                c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
+                for i in xrange(self.ncomp):
+                    c0[i,:] = np.sum(zref==i)
+                zhat = zref.copy()
+
+
             if isinstance(self.verbose, int) and self.verbose and \
                     not isinstance(self.verbose, bool):
                 if i % self.verbose == 0:
@@ -255,7 +265,7 @@ class DPNormalMixture(object):
         # clean up threads
         if self.parallel:
             for i in xrange(self.num_cores):
-                self.work_queue.put(None)
+                self.work_queue[i].put(None)
         if self.gpu:
             kill_GPUWorkers(self.gpu_workers)
 
@@ -318,11 +328,29 @@ class DPNormalMixture(object):
         else:
             data = other_dat
 
-        num_jobs = self.ncomp
-        for j in xrange(self.ncomp):
-            if self.parallel:
-                self.work_queue.put(CompUpdate(j, labels, Sigma[j]))
-            else:
+        num_jobs = len(self.compsdevmap)
+
+        if self.parallel:
+            for tid in self.compsdevmap:
+                rng = self.compsdevmap[tid]
+                self.work_queue[tid].put(CompUpdate(np.arange(rng[0], rng[1]), labels, Sigma[rng[0]:rng[1]]))
+
+            #while num_jobs:
+            for tid in self.compsdevmap:
+                result = self.result_queue[tid].get()
+                newcomps = result.comps
+                rng = (newcomps[0], newcomps[-1]+1)
+                mu_output[rng[0]:rng[1]] = result.new_mu
+                Sigma_output[rng[0]:rng[1]] = result.new_Sigma
+                if is_hdp:
+                    ct[:,rng[0]:rng[1]] = result.count
+                else:
+                    ct[rng[0]:rng[1]] = result.count
+                num_jobs -= 1            
+
+        else:
+
+            for j in xrange(self.ncomp):
                 if is_hdp:
                     nobs = data.shape[0]
                     mask = np.zeros(nobs, dtype=np.bool)
@@ -375,17 +403,7 @@ class DPNormalMixture(object):
                 else:
                     ct[j] = count
 
-        if self.parallel:
-            while num_jobs:
-                result = self.result_queue.get()
-                j = result.comp
-                mu_output[j] = result.new_mu
-                Sigma_output[j] = result.new_Sigma
-                if is_hdp:
-                    ct[:,j] = result.count
-                else:
-                    ct[j] = result.count
-                num_jobs -= 1
+
 
         return mu_output, Sigma_output, ct
 

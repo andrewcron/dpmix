@@ -166,12 +166,19 @@ class HDPNormalMixture(DPNormalMixture):
             self.alldata[self.cumobs[i]:self.cumobs[i+1],:] = self.data[i].copy()
 
         if self.parallel:
-            self.num_cores = min(min(multiprocessing.cpu_count(), self.ncomp), 4)
-            self.work_queue = multiprocessing.Queue()
-            self.result_queue = multiprocessing.Queue()
+            self.num_cores = min(min(multiprocessing.cpu_count(), self.ncomp), 16)
+            compsperdev = self.ncomp / self.num_cores
+            self.work_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
+            self.result_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
             self.workers = [ CPUWorker(np.zeros((1,1)), self.gamma, self.mu_prior_mean, 
-                                       self._Phi0, self._nu0, self.work_queue, self.result_queue)
+                                       self._Phi0, self._nu0, self.work_queue[i], self.result_queue[i])
                              for i in xrange(self.num_cores) ]
+            self.compsdevmap = {}; cumcomps = 0
+            for i in xrange(self.num_cores):
+                self.compsdevmap[i] = [int(cumcomps), int(min(cumcomps+compsperdev, self.ncomp))]
+                cumcomps += compsperdev
+            self.compsdevmap[self.num_cores-1][1] = self.ncomp
+
             for thd in self.workers:
                 thd.set_data(self.data_shared_mem, sum(self.nobs), self.ndim)
 
@@ -217,7 +224,7 @@ class HDPNormalMixture(DPNormalMixture):
             ## update labels
             labels, zhat = self._update_labels(mu, Sigma, weights)
             ## Get initial reference if needed
-            if i==-nburn and ident:
+            if i==0 and ident:
                 zref = []
                 for ii in xrange(self.ngroups):
                     zref.append(zhat[ii].copy())
@@ -377,42 +384,6 @@ class HDPNormalMixture(DPNormalMixture):
             self.AR[j] = 0
 
 
-    # def _update_mu_Sigma(self, mu, masks):
-    #     mu_output = np.zeros((self.ncomp, self.ndim))
-    #     Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim))
-
-    #     for j in xrange(self.ncomp):
-    #         # get summary stats across multiple datasets
-    #         sumxj = np.zeros(self.ndim)
-    #         data_SS = np.zeros((self.ndim, self.ndim))
-    #         nj = 0
-    #         for d in xrange(self.ngroups):
-    #             mask = masks[d][j]
-    #             Xj = self.data[d][mask]
-    #             nj += len(Xj)
-    #             sumxj += Xj.sum(0)
-    #             Xj_demeaned = Xj - mu[j]
-    #             data_SS += np.dot(Xj_demeaned.T, Xj_demeaned)
-
-    #         #update Sigma then mu
-    #         mu_hyper = self.mu_prior_mean
-    #         gam = self.gamma[j]
-
-    #         mu_SS = np.outer(mu[j] - mu_hyper, mu[j] - mu_hyper) / gam
-    #         post_Phi = data_SS + mu_SS + self._Phi0[j]
-    #         # symmetrize just in case
-    #         post_Phi = (post_Phi + post_Phi.T)/2
-    #         post_nu = nj + self.ndim + self._nu0 + 2
-    #         new_Sigma = pm.rinverse_wishart_prec(post_nu, post_Phi)
-    #         #mu
-    #         post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
-    #         post_cov = 1 / (1 / gam + nj) * new_Sigma
-    #         new_mu = pm.rmv_normal_cov(post_mean, post_cov)
-
-    #         mu_output[j] = new_mu
-    #         Sigma_output[j] = new_Sigma
-
-    #     return mu_output, Sigma_output
 
 
             
