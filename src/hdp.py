@@ -231,8 +231,9 @@ class HDPNormalMixture(DPNormalMixture):
             counts = []
 
             for ii in xrange(self.ngroups):
-                component_mask[:,self.cumobs[ii]:self.cumobs[ii+1]] = _get_mask(labels[ii], self.ncomp)
-                counts.append(component_mask[:,self.cumobs[ii]:self.cumobs[ii+1]].sum(1))
+                cur_mask = _get_mask(labels[ii], self.ncomp)
+                component_mask[:,self.cumobs[ii]:self.cumobs[ii+1]] = cur_mask.copy()
+                counts.append(cur_mask.sum(1))
 
             stick_weights, weights = self._update_stick_weights(counts, beta, alpha0)
             stick_beta, beta = self._update_beta(stick_beta, beta, stick_weights, alpha0, alpha)

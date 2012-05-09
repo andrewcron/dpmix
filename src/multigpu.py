@@ -64,16 +64,26 @@ def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
 
     ## setup task
     for i in xrange(ndata):
-        tasks[_datadevmap[i]].append(MCMC_Task(w[i], mu, Sigma, relabel, _dataind[i], i))
+        tasks[_datadevmap[i]].append(MCMC_Task(Sigma.shape[0], relabel, _dataind[i], i))
 
     for i in xrange(ndev):
         workers.isend(tasks[i], dest=i, tag=11)
+        for tsk in tasks[i]:
+            gid = tsk.gid
+            workers.Send([np.asarray(w[gid].copy(),dtype='d'), MPI.DOUBLE], dest=i, tag=21)
+            workers.Send([np.asarray(mu, dtype='d'), MPI.DOUBLE], dest=i, tag=22)
+            workers.Send([np.asarray(Sigma, dtype='d'), MPI.DOUBLE], dest=i, tag=23)
 
     for i in xrange(ndev):
         results = workers.recv(source=i, tag=13)
         for res in results:
-            labels[res.gid] = res.labs
-            Z[res.gid] = res.Z
+            labs = np.empty(res.nobs, dtype='i')
+            workers.Recv([labs, MPI.INT], source=i, tag=21)
+            labels[res.gid] = labs
+            if relabel:
+                cZ = np.empty(res.nobs, dtype='i')
+                workers.Recv([cZ, MPI.INT], source=i, tag=22)
+                Z[res.gid] = cZ
 
 
     return labels, Z 
@@ -83,57 +93,82 @@ def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
     ndev = workers.remote_group.size
     nobs, i = 0, 0
     partitions = [0]
-    theta = [MCMC_Task(w, mu, Sigma, relabel)]
+    theta = [MCMC_Task(len(w), relabel)]
     for i in xrange(ndev):
         # give new params
         workers.isend(theta, dest=i, tag=11)
+        workers.Send([np.asarray(w,dtype='d'), MPI.DOUBLE], dest=i, tag=21)
+        workers.Send([np.asarray(mu,dtype='d'), MPI.DOUBLE], dest=i, tag=22)
+        workers.Send([np.asarray(Sigma,dtype='d'), MPI.DOUBLE], dest=i, tag=23)
     #gather the results
-    theta = []
+    theta = []; labs=[]; Zs=[];
     for i in xrange(ndev):
         theta.append(workers.recv(source=i, tag=13))
         nobs += theta[-1][0].nobs
         partitions.append(nobs)
+        lab = np.empty(theta[-1][0].nobs, dtype='i')
+        workers.Recv([lab, MPI.INT], source=i, tag=21)
+        labs.append(lab)
+        if relabel:
+            Z = np.empty(theta[-1][0].nobs, dtype='i')
+            workers.Recv([Z, MPI.INT], source=i, tag=22)
+            Zs.append(Z)
 
-    res = np.zeros(nobs, dtype=np.float32)
+    res = np.zeros(nobs, dtype='i')
     if relabel:
         Z = res.copy()
     else:
         Z = None
 
     for i in xrange(ndev):
-        res[partitions[i]:partitions[i+1]] = theta[i][0].labs
+        res[partitions[i]:partitions[i+1]] = labs[i]
         if relabel:
-            Z[partitions[i]:partitions[i+1]] = theta[i][0].Z
+            Z[partitions[i]:partitions[i+1]] = Zs[i]
 
     return res, Z
 
 def get_expected_labels_GPU(workers, w, mu, Sigma):
     # run all the threads
     ndev = workers.remote_group.size
+    ncomp = len(w)
+    ndim = Sigma.shape[1]
     nobs, i = 0, 0
     partitions = [0]
-    theta = [BEM_Task(w, mu, Sigma)]
+    theta = [BEM_Task(len(w))]
     for i in xrange(ndev):
         # give new params
         workers.isend(theta, dest=i, tag=11)
+        workers.Send([np.asarray(w,dtype='d'), MPI.DOUBLE], dest=i, tag=21)
+        workers.Send([np.asarray(mu,dtype='d'), MPI.DOUBLE], dest=i, tag=22)
+        workers.Send([np.asarray(Sigma,dtype='d'), MPI.DOUBLE], dest=i, tag=23)
+
     #gather results
-    theta = []; 
+    theta = []; xbars = []; densities=[]; cts = []
+    ll = 0
+
     for i in xrange(ndev):
         theta.append(workers.recv(source=i, tag=13))
         nobs += theta[-1][0].nobs
+        ll += theta[-1][0].ll
         partitions.append(nobs)
+        ct = np.empty(ncomp, dtype='d')
+        workers.Recv([ct, MPI.DOUBLE], source=i, tag=21)
+        cts.append(ct)
+        xbar = np.empty(ncomp*ndim, dtype='d')
+        workers.Recv([xbar, MPI.DOUBLE], source=i, tag=22)
+        xbars.append(xbar.reshape(ncomp, ndim))
+        dens = np.empty(theta[-1][0].nobs*ncomp, dtype='d')
+        workers.Recv([dens, MPI.DOUBLE], source=i, tag=23)
+        densities.append(dens.reshape(theta[-1][0].nobs, ncomp))
 
-    ncomp = len(w); ndim = theta[0][0].ndim
-    dens = np.zeros((nobs, ncomp), dtype=np.float32)
-    xbar = np.zeros((ncomp, ndim), dtype=np.float32)
-    ct = np.zeros(ncomp, dtype=np.float32)
-    ll = 0
+    dens = np.zeros((nobs, ncomp), dtype='d')
+    xbar = np.zeros((ncomp, ndim), dtype='d')
+    ct = np.zeros(ncomp, dtype='d')
     #import pdb; pdb.set_trace()
     for i in xrange(ndev):
-        ll += theta[i][0].ll
-        ct += theta[i][0].ct
-        xbar += theta[i][0].xbar
-        dens[partitions[i]:partitions[i+1], :] = theta[i][0].dens
+        ct += cts[i]
+        xbar += xbars[i]
+        dens[partitions[i]:partitions[i+1], :] = densities[i]
         
     return ll, ct, xbar, dens
 
