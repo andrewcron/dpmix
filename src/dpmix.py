@@ -256,11 +256,11 @@ class DPNormalMixture(object):
                 weights = weights[iii]
                 mu = mu[iii]
                 Sigma = Sigma[iii]
-                
-            self.weights[i] = weights
-            self.alpha[i] = alpha
-            self.mu[i] = mu
-            self.Sigma[i] = Sigma
+            if i>= 0:
+                self.weights[i] = weights
+                self.alpha[i] = alpha
+                self.mu[i] = mu
+                self.Sigma[i] = Sigma
 
         # clean up threads
         if self.parallel:
@@ -280,6 +280,7 @@ class DPNormalMixture(object):
 
     def _setup_storage(self, niter=1000, thin=1):
         nresults = niter // thin
+
         self.weights = np.zeros((nresults, self.ncomp))
         self.mu = np.zeros((nresults, self.ncomp, self.ndim))
         self.Sigma = np.zeros((nresults, self.ncomp, self.ndim, self.ndim))
