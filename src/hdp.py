@@ -269,7 +269,7 @@ class HDPNormalMixture(DPNormalMixture):
             kill_GPUWorkers(self.gpu_workers)
         if self.parallel:
             for ii in range(len(self.workers)):
-                self.work_queue.put(None)
+                self.work_queue[ii].put(None)
                 
             
 
