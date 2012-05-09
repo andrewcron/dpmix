@@ -354,15 +354,15 @@ class DPNormalMixture(object):
                 if is_hdp:
                     nobs = data.shape[0]
                     mask = np.zeros(nobs, dtype=np.bool)
-                    self.count = np.zeros(len(labels), dtype=np.int)
+                    count = np.zeros(len(labels), dtype=np.int)
                     cumobs = 0; ii = 0
-                    for labs in self.labels:
-                        submask = labs == self.comp
+                    for labs in labels:
+                        submask = labs == j
                         mask[cumobs:(cumobs+len(labs))] = submask
-                        self.count[ii] = np.sum(submask); 
+                        count[ii] = np.sum(submask); 
                         cumobs+=len(labs); ii+=1
                     else:
-                        mask = self.labels == self.comp
+                        mask = labels == j
                         self.count = np.sum(mask)
 
 
