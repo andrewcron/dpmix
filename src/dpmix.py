@@ -9,11 +9,10 @@ from __future__ import division
 import numpy as np
 import numpy.random as npr
 
-import pymc as pm
-
 from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, _get_cost, select_gpu
 from multicpu import CPUWorker, CompUpdate
 
+from wishart import invwishartrand, invwishartrand_prec
 
 import multiprocessing
 import cython
@@ -110,10 +109,10 @@ class DPNormalMixture(object):
                         if self.dev_list.shape == ():
                             self.dev_list.shape = 1
                         self.dev_list = np.unique(self.dev_list)
-		else:
-		    self.gpu = True
-	    else:
-		self.gpu = False
+                else:
+                    self.gpu = True
+            else:
+                self.gpu = False
 
             self.data = np.asarray(data)
             self.nobs, self.ndim = self.data.shape
@@ -163,16 +162,14 @@ class DPNormalMixture(object):
             # draw from prior .. bad idea for vague prior ??? 
             Sigma0 = np.empty((self.ncomp, self.ndim, self.ndim))
             for j in xrange(self.ncomp):
-                Sigma0[j] = pm.rinverse_wishart(nu0 + 1 + self.ndim, Phi0[j])
+                Sigma0[j] = invwishartrand(nu0 + 1 + self.ndim, Phi0[j])
             #Sigma0 = Phi0.copy()
 
         # starting values, are these sensible?
         if mu0 is None:
             mu0 = np.empty((self.ncomp, self.ndim))
             for j in xrange(self.ncomp):
-                #mu0[j] = pm.rmv_normal_cov(self.data.mean(0),
-                #                           np.cov(self.data.T))
-                mu0[j] = pm.rmv_normal_cov(np.zeros((self.ndim)),
+                mu0[j] = npr.multivariate_normal(np.zeros((self.ndim)),
                                            self.gamma[j]*Sigma0[j])
 
         if weights0 is None:
@@ -332,8 +329,8 @@ class DPNormalMixture(object):
                 post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
                 post_cov = 1 / (1 / gam + nj) * Sigma[j]
 
-                new_mu = pm.rmv_normal_cov(post_mean, post_cov)
-
+                new_mu = npr.multivariate_normal(post_mean, post_cov)
+                
                 Xj_demeaned = Xj - new_mu
 
                 mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
@@ -347,8 +344,7 @@ class DPNormalMixture(object):
                 # P(Sigma | theta, Y) ~
                 post_nu = nj + self.ndim + self._nu0 + 2
 
-                # pymc rinverse_wishart takes
-                new_Sigma = pm.rinverse_wishart_prec(post_nu, post_Phi)
+                new_Sigma = invwishartrand_prec(post_nu, post_Phi)
 
                 mu_output[j] = new_mu
                 Sigma_output[j] = new_Sigma

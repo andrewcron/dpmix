@@ -1,6 +1,8 @@
 import multiprocessing
 import pymc as pm
 import numpy as np
+import numpy.random as npr
+from wishart import invwishartrand_prec
 
 ######### Multi CPU for comp updates ##############
 class CPUWorker(multiprocessing.Process):
@@ -79,7 +81,7 @@ class CompUpdate(object):
         post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
         post_cov = 1 / (1 / gam + nj) * self.Sigma
 
-        new_mu = pm.rmv_normal_cov(post_mean, post_cov)
+        new_mu = npr.multivariate_normal(post_mean, post_cov)
 
         Xj_demeaned = Xj - new_mu
 
@@ -95,7 +97,7 @@ class CompUpdate(object):
         post_nu = nj + ndim + nu0 + 2
 
         # pymc rinverse_wishart takes
-        new_Sigma = pm.rinverse_wishart_prec(post_nu, post_Phi)
+        new_Sigma = invwishartrand_prec(post_nu, post_Phi)
 
         # store new results in class
         self.new_Sigma = new_Sigma

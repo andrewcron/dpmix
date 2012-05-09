@@ -5,7 +5,6 @@ import numpy.random as npr
 from scipy import stats
 import multiprocessing
 
-import pymc as pm
 
 from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, _get_cost, select_gpu
 from utils import break_sticks

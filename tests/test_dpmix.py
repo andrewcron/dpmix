@@ -16,7 +16,7 @@ from dpmix import DPNormalMixture
 from BEM import BEM_DPNormalMixture
 #from dpmix import DPNormalMixture, BEM_DPNormalMixture
 
-import gpustats as gs
+#import gpustats as gs
 
 from test_help import *
 
