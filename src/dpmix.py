@@ -231,13 +231,12 @@ class DPNormalMixture(object):
                     print i
 
             labels, zhat = self._update_labels(mu, Sigma, weights, ident)
+            mu, Sigma, counts = self._update_mu_Sigma(Sigma, labels)
 
-            component_mask = _get_mask(labels, self.ncomp)
-            counts = component_mask.sum(1)
             stick_weights, weights = self._update_stick_weights(counts, alpha)
 
             alpha = self._update_alpha(stick_weights)
-            mu, Sigma = self._update_mu_Sigma(Sigma, component_mask)
+
 
             ## relabel if needed:
             if ident:
@@ -305,9 +304,16 @@ class DPNormalMixture(object):
         b = self.f - np.log(1 - V).sum()
         return npr.gamma(a, scale=1 / b)
 
-    def _update_mu_Sigma(self, Sigma, component_mask, other_dat=None):
+    def _update_mu_Sigma(self, Sigma, labels, other_dat=None):
+        is_hdp = isinstance(labels, list)
+
         mu_output = np.zeros((self.ncomp, self.ndim))
         Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim))
+        if is_hdp:
+            ct = np.zeros((len(labels), self.ncomp), dtype=np.int)
+        else:
+            ct = np.zeros(self.ncomp, dtype=np.int)
+
         if other_dat is None:
             data = self.data
         else:
@@ -315,10 +321,26 @@ class DPNormalMixture(object):
 
         num_jobs = self.ncomp
         for j in xrange(self.ncomp):
-            mask = component_mask[j]
             if self.parallel:
-                self.work_queue.put(CompUpdate(j, mask, Sigma[j]))
+                self.work_queue.put(CompUpdate(j, labels, Sigma[j]))
             else:
+                if is_hdp:
+                    nobs = data.shape[0]
+                    mask = np.zeros(nobs, dtype=np.bool)
+                    self.count = np.zeros(len(self.labels), dtype=np.int)
+                    cumobs = 0; ii = 0
+                    for labs in self.labels:
+                        submask = labs == self.comp
+                        mask[cumobs:(cumobs+len(labs))] = submask
+                        self.count[ii] = np.sum(submask); 
+                        cumobs+=len(labs); ii+=1
+                    else:
+                        mask = self.labels == self.comp
+                        self.count = np.sum(mask)
+
+
+                mask = labels == j 
+                count = np.sum(mask)
                 Xj = data[mask]
                 nj = len(Xj)
                 
@@ -349,6 +371,10 @@ class DPNormalMixture(object):
 
                 mu_output[j] = new_mu
                 Sigma_output[j] = new_Sigma
+                if is_hdp:
+                    ct[:, j] = count
+                else:
+                    ct[j] = count
 
         if self.parallel:
             while num_jobs:
@@ -356,9 +382,13 @@ class DPNormalMixture(object):
                 j = result.comp
                 mu_output[j] = result.new_mu
                 Sigma_output[j] = result.new_Sigma
+                if is_hdp:
+                    ct[:,j] = result.count
+                else:
+                    ct[j] = result.count
                 num_jobs -= 1
 
-        return mu_output, Sigma_output
+        return mu_output, Sigma_output, ct
 
 
 
