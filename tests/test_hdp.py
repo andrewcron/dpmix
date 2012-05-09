@@ -19,9 +19,9 @@ from hdp import HDPNormalMixture
 
 if __name__ == '__main__':
 
-    N = int(1e5)
+    N = int(1e6)
     K = 2
-    J = 3
+    J = 4
     ncomps = 3
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
     data = data - data.mean(0)
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     all_data = data[ind].copy()
     data = [ all_data[(N/J*i):(N/J*(i+1))].copy() for i in range(J) ]
 
-    mcmc = HDPNormalMixture(data, ncomp=4, gpu=[1], parallel=True, verbose=100)
+    mcmc = HDPNormalMixture(data, ncomp=4, gpu=[1,3], parallel=True, verbose=100)
     mcmc.sample(200, nburn=500, tune_interval=100)
     imcmc = HDPNormalMixture(mcmc, verbose=100)
     imcmc.sample(200, nburn=0, ident=True)

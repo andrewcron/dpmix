@@ -147,20 +147,16 @@ def break_sticks(V):
 
 #### Task Classes ####
 class MCMC_Task(object):
-    def __init__(self, w, mu, Sigma, relabel=False, dataind=0, gid = 0):
-        self.w = w
-        self.mu = mu
-        self.Sigma = Sigma
+    def __init__(self, ncomp, relabel=False, dataind=0, gid = 0):
+        self.ncomp = ncomp
         self.relabel = relabel
         self.dataind = dataind
         self.gid = gid
 
 class BEM_Task(object):
 
-    def __init__(self, w, mu, Sigma, dataind=0, gid=0):
-        self.w = w
-        self.mu = mu
-        self.Sigma = Sigma
+    def __init__(self, ncomp, dataind=0, gid=0):
+        self.ncomp = ncomp
         self.dataind = dataind
         self.gid = gid
 
