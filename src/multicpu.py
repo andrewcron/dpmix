@@ -63,14 +63,28 @@ class BEMSigmaUpdate(object):
     
 
 class CompUpdate(object):
-    def __init__(self, comp, mask, Sigma):
+    def __init__(self, comp, labels, Sigma):
         self.comp = comp
-        self.mask = mask
+        self.labels = labels
         self.Sigma = Sigma
 
     def __call__(self, data, gamma, mu_prior_mean, Phi0, nu0):
         j = self.comp
-        Xj = data[self.mask]
+        if isinstance(self.labels, list):
+            nobs = data.shape[0]
+            mask = np.zeros(nobs, dtype=np.bool)
+            self.count = np.zeros(len(self.labels), dtype=np.int)
+            cumobs = 0; ii = 0
+            for labs in self.labels:
+                submask = labs == self.comp
+                mask[cumobs:(cumobs+len(labs))] = submask
+                self.count[ii] = np.sum(submask); 
+                cumobs+=len(labs); ii+=1
+        else:
+            mask = self.labels == self.comp
+            self.count = np.sum(mask)
+
+        Xj = data[mask]
         nj, ndim = Xj.shape
 
         sumxj = Xj.sum(0)
@@ -98,6 +112,9 @@ class CompUpdate(object):
 
         # pymc rinverse_wishart takes
         new_Sigma = invwishartrand_prec(post_nu, post_Phi)
+
+        del self.labels
+        del self.Sigma
 
         # store new results in class
         self.new_Sigma = new_Sigma

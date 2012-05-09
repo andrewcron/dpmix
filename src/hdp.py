@@ -166,7 +166,7 @@ class HDPNormalMixture(DPNormalMixture):
             self.alldata[self.cumobs[i]:self.cumobs[i+1],:] = self.data[i].copy()
 
         if self.parallel:
-            self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
+            self.num_cores = min(min(multiprocessing.cpu_count(), self.ncomp), 4)
             self.work_queue = multiprocessing.Queue()
             self.result_queue = multiprocessing.Queue()
             self.workers = [ CPUWorker(np.zeros((1,1)), self.gamma, self.mu_prior_mean, 
@@ -225,23 +225,18 @@ class HDPNormalMixture(DPNormalMixture):
                 for j in xrange(self.ncomp):
                     for ii in xrange(self.ngroups):
                         c0[j,:] += np.sum(zref[ii]==j)
+
+            ## update mu and sigma
+            mu, Sigma, counts = self._update_mu_Sigma(Sigma, labels, self.alldata)
+
             ## update weights, masks
-            component_mask = np.zeros((self.ncomp, sum(self.nobs)), dtype=np.bool)
-            counts = []
-
-            for ii in xrange(self.ngroups):
-                cur_mask = _get_mask(labels[ii], self.ncomp)
-                component_mask[:,self.cumobs[ii]:self.cumobs[ii+1]] = cur_mask.copy()
-                counts.append(cur_mask.sum(1))
-
             stick_weights, weights = self._update_stick_weights(counts, beta, alpha0)
             stick_beta, beta = self._update_beta(stick_beta, beta, stick_weights, alpha0, alpha)
             ## hyper parameters
             alpha = self._update_alpha(stick_beta)
             alpha0 = self._update_alpha0(stick_weights, beta, alpha0)
 
-            ## update mu and sigma
-            mu, Sigma = self._update_mu_Sigma(Sigma, component_mask, self.alldata)
+
             ## Relabel
             if ident:
                 cost = c0.copy()
