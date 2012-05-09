@@ -329,9 +329,8 @@ class DPNormalMixture(object):
         else:
             data = other_dat
 
-        num_jobs = len(self.compsdevmap)
-
         if self.parallel:
+            num_jobs = len(self.compsdevmap)
             for tid in self.compsdevmap:
                 rng = self.compsdevmap[tid]
                 self.work_queue[tid].put(CompUpdate(np.arange(rng[0], rng[1]), labels, Sigma[rng[0]:rng[1]]))
