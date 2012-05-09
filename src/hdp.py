@@ -245,7 +245,7 @@ class HDPNormalMixture(DPNormalMixture):
 
 
             ## Relabel
-            if ident:
+            if i>0 and ident:
                 cost = c0.copy()
                 for Z, Zr in zip(zhat, zref):
                     _get_cost(Zr, Z, cost)

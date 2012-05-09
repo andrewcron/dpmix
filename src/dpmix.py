@@ -249,7 +249,7 @@ class DPNormalMixture(object):
 
 
             ## relabel if needed:
-            if ident:
+            if i>0 and ident:
                 cost = c0.copy()
                 _get_cost(zref, zhat, cost) #cython!!
                 _, iii = np.where(munkres(cost))
