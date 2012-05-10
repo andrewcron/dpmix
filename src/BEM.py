@@ -57,9 +57,9 @@ class BEM_DPNormalMixture(DPNormalMixture):
     """
 
     def __init__(self, data, ncomp=256, gamma0=100, m0=None,
-                 nu0=None, Phi0=None, e0=1, f0=1,
+                 nu0=None, Phi0=None, e0=10, f0=1,
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
-                 gpu=None, parallel=False, verbose=False):
+                 gpu=None, parallel=True, verbose=False):
 
         ## for now, initialization is exactly the same .... 
         super(BEM_DPNormalMixture, self).__init__(
