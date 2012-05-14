@@ -363,7 +363,7 @@ class DPNormalMixture(object):
                         cumobs+=len(labs); ii+=1
                 else:
                     mask = labels == j
-                    self.count = np.sum(mask)
+                    count = np.sum(mask)
 
 
                 Xj = data[mask]
