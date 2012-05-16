@@ -230,8 +230,8 @@ class DPNormalMixture(object):
             if i==0 and ident:
                 labels, zref = self._update_labels(mu, Sigma, weights, True)
                 c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
-                for i in xrange(self.ncomp):
-                    c0[i,:] = np.sum(zref==i)
+                for j in xrange(self.ncomp):
+                    c0[j,:] = np.sum(zref==i)
                 zhat = zref.copy()
 
 
@@ -256,7 +256,7 @@ class DPNormalMixture(object):
                 weights = weights[iii]
                 mu = mu[iii]
                 Sigma = Sigma[iii]
-            if i>= 0:
+            if i>=0:
                 self.weights[i] = weights
                 self.alpha[i] = alpha
                 self.mu[i] = mu
