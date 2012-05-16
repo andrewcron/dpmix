@@ -1,7 +1,10 @@
 import numpy as np
 import numpy.random as npr
-from numpy.linalg import inv, cholesky
+from numpy.linalg import cholesky, solve
 from scipy.stats import chi2
+
+def inv(x):
+    return solve(x, np.eye(x.shape[0]))
 
 def invwishartrand(nu,phi):
     return inv(wishartrand(nu,phi))
@@ -26,13 +29,21 @@ def wishartrand(nu, phi):
     
     
 if __name__ == '__main__':
+    import pymc as pm
     npr.seed(1)
     nu = 5
     a = np.array([[1,0.5,0],[0.5,1,0],[0,0,1]])
     #print invwishartrand(nu,a)
-    x = np.array([ invwishartrand(nu,a) for i in range(20000)])
-    nux = np.array([invwishartrand_prec(nu,a) for i in range(20000)])
-    print x.shape
-    print np.mean(x,0),"\n", inv(np.mean(nux,0))
-    #print inv(a)/(nu-a.shape[0]-1)
-    
+    px = np.array([ pm.rinverse_wishart(nu, a) for i in range(10000)])
+    x = np.array([ invwishartrand(nu,a) for i in range(10000)])
+    print np.mean(x,0), '\n', np.mean(px,0)
+#    nux = np.array([invwishartrand_prec(nu,a) for i in range(10000)])
+#    pnux = np.array([ pm.rinverse_wishart_prec(nu, a) for i in range(10000)])
+#    print np.mean(nux,0), '\n', np.mean(pnux,0)
+#    pw = np.array([pm.rwishart(nu,a) for i in range(10000)])
+#    w = np.array([wishartrand(nu,a) for i in range(10000)])
+#    print np.mean(w,0)/nu, '\n', np.mean(pw,0)/nu
+#    print x.shape
+#    print np.mean(x,0),"\n", inv(np.mean(nux,0))
+#    print inv(a)/(nu-a.shape[0]-1)
+#    

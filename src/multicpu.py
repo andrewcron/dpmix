@@ -1,5 +1,4 @@
 import multiprocessing
-import pymc as pm
 import numpy as np
 import numpy.random as npr
 from wishart import invwishartrand_prec
