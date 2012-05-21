@@ -121,8 +121,11 @@ class HDPNormalMixture(DPNormalMixture):
             self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                      weights0, e0, f0)
             # initialize hdp specific vars
-            self._weights0 = np.zeros((self.ngroups, self.ncomp), dtype=np.float)
-            self._weights0.fill(1/self.ncomp)
+            if weights0 is None:
+                self._weights0 = np.zeros((self.ngroups, self.ncomp), dtype=np.float)
+                self._weights0.fill(1/self.ncomp)
+            else:
+                self._weights0 = weights0.copy()
             self._stick_beta0 = stats.beta.rvs(1,self._alpha0, size=self.ncomp-1)
             self._beta0 = break_sticks(self._stick_beta0)
             self._alpha00 = 1.0
