@@ -18,12 +18,12 @@ apply_rows_max(float* X, /** matrix to apply .. row major **/
   extern __shared__ float shared_data[];
   float *sh_max = shared_data + bdx*bdx;
 
-  if( thidy == 0 && thidx + currow < rows  ){
-      sh_max[thidx] = -1e37;
-  }
-  __syncthreads();  
+//  if( thidy == 0 && thidx + currow < rows  ){
+//      sh_max[thidx] = -1e37;
+//  }
+//  __syncthreads();  
   
-  float cur_val; float new_val; int argmax;
+  float cur_val; float new_val; int argmax=0;
   for(int chunk = 0; chunk < cols; chunk+=bdx){
   	  // get some values chunking accross rows ...
 	  if(currow+thidy < rows && chunk + thidx < cols){
@@ -31,6 +31,11 @@ apply_rows_max(float* X, /** matrix to apply .. row major **/
 	  __syncthreads();
 	  // get maximum in chunk ...
   	  if( thidy == 0 && thidx + currow < rows ){
+	      // if first val, it's the max
+	      if( chunk==0 ){
+	         sh_max[thidx] = shared_data[thidx];
+	      }
+              // get maximmum in chunk ... 
 	      for( int i = 0; i < bdx; i++){
 	      	   if(chunk + i < cols){
 	      	      cur_val = sh_max[thidx];
