@@ -251,7 +251,11 @@ class DPNormalMixture(object):
             ## relabel if needed:
             if i>0 and ident:
                 cost = c0.copy()
-                _get_cost(zref, zhat, cost) #cython!!
+                try:
+                    _get_cost(zref, zhat, cost) #cython!!
+                except IndexError:
+                    print 'Something stranged happened ... do zref and zhat look correct?'
+                    import pdb; pdb.set_trace()
                 _, iii = np.where(munkres(cost))
                 weights = weights[iii]
                 mu = mu[iii]

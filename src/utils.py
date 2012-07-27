@@ -33,6 +33,7 @@ def _get_cost(x,y,C):
     for i in range(n):
         C[x[i], y[i]] -= 1 
 
+
 def mvn_weighted_logged(data, means, covs, weights):
     n, p = data.shape
     k = len(weights)

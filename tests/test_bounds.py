@@ -1,6 +1,7 @@
 import numpy.random as npr
 from dpmix import HDPNormalMixture
 
+
 if __name__ == '__main__':
     nclust = 256
     niter = 10
@@ -10,7 +11,7 @@ if __name__ == '__main__':
     num_files = 10
 
     seed = 9
-    npr.seed(seed)
+    #npr.seed(seed)
 
     xs = []
     for i in range(num_files):
