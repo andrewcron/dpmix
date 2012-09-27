@@ -62,7 +62,7 @@ class HDPNormalMixture(DPNormalMixture):
     v_{kj} ~ beta(\alpha_0 \beta_k, alpha_0*(1-\sum_{l=1}^k \beta_l) )
     \alpha_0 ~ Ga(g, h)
     \mu_k ~ N(0, m\Sigma_k)
-    \Sigma_j ~ IW(nu0+2, nu0*\Phi_k)
+    \Sigma_j ~ IW(nu0+2, nu0*Phi_k)
 
     Citation
     --------
@@ -74,7 +74,7 @@ class HDPNormalMixture(DPNormalMixture):
     """
 
     def __init__(self, data, ncomp=256, gamma0=10, m0=None,
-                 nu0=None, Phi0=None, e0=10, f0=1, g0=10, h0=1, 
+                 nu0=None, Phi0=None, e0=5, f0=0.1, g0=0.1, h0=0.1, 
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
                  gpu=None, parallel=False, verbose=False):
 

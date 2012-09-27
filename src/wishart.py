@@ -32,7 +32,7 @@ if __name__ == '__main__':
     import pymc as pm
     npr.seed(1)
     nu = 5
-    a = np.array([[1,0.5,0],[0.5,1,0],[0,0,1]])
+    a = np.array([[1,0,0],[0,1,0],[0,0,1]])
     #print invwishartrand(nu,a)
     px = np.array([ pm.rinverse_wishart(nu, a) for i in range(10000)])
     x = np.array([ invwishartrand(nu,a) for i in range(10000)])

@@ -12,14 +12,16 @@ if __name__ == '__main__':
 
     seed = 9
     #npr.seed(seed)
+    for it in range(10, 20):
+        xs = []
+        for i in range(num_files):
+            print i,
+            xs.append(npr.uniform(-5,5,(max_events, 5)))
+        print
+        mcmc = HDPNormalMixture(xs, ncomp=nclust, gpu=device, parallel=True, verbose=2)
+        mcmc.sample(burnin, nburn=0, tune_interval=5)
+        imcmc = HDPNormalMixture(mcmc, verbose=2)
+        imcmc.sample(niter, nburn=0, ident=True)
 
-    xs = []
-    for i in range(num_files):
-        print i,
-        xs.append(npr.uniform(-5,5,(max_events, 5)))
-    print
-
-    mcmc = HDPNormalMixture(xs, ncomp=nclust, gpu=device, parallel=True, verbose=2)
-    mcmc.sample(burnin, nburn=0, tune_interval=5)
-    imcmc = HDPNormalMixture(mcmc, verbose=2)
-    imcmc.sample(niter, nburn=0, ident=True)
+        del mcmc
+        del imcmc

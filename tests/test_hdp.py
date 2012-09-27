@@ -31,7 +31,7 @@ if __name__ == '__main__':
     all_data = data[ind].copy()
     data = [ all_data[(N/J*i):(N/J*(i+1))].copy() for i in range(J) ]
 
-    mcmc = HDPNormalMixture(data, ncomp=3, gpu=[3,4], parallel=False, verbose=100)
+    mcmc = HDPNormalMixture(data, ncomp=384, gpu=[3,4], parallel=False, verbose=100)
     mcmc.sample(200, nburn=500, tune_interval=100)
     imcmc = HDPNormalMixture(mcmc, verbose=100)
     imcmc.sample(200, nburn=0, ident=True)
