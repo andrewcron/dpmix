@@ -227,12 +227,13 @@ def gpu_apply_row_max(X):
         blocksize = 16
 
     gridsize = int(dims[0] / blocksize) + 1
-    shared = 4*blocksize*(blocksize+1)
 
     if gX.flags.c_contiguous:
         func = CUDA_Kernels.get_function("apply_rows_max")
+        shared = 4*blocksize*(blocksize+2) # pad for bank conflicts
     else:
         func = CUDA_Kernels.get_function("apply_rows_max_cm")
+        shared = 4*blocksize*(blocksize+1)
 
     func(gX, gy, giy, dims[0], dims[1], block=(blocksize, blocksize,1),
          grid = (gridsize,1), shared = shared)

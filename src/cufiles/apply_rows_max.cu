@@ -12,11 +12,12 @@ apply_rows_max(float* X, /** matrix to apply .. row major **/
   unsigned int bid = blockIdx.x;
   unsigned int bdx = blockDim.x; // assumed equal to blockDim.y .. 16 or 32 ..
 
-  int currow = bdx*bid;
+  unsigned int stride = bdx + 1; // shared mem padded for bank conflicts
+  unsigned int currow = bdx*bid;
 
   // flexible block size 
   extern __shared__ float shared_data[];
-  float *sh_max = shared_data + bdx*bdx;
+  float *sh_max = shared_data + bdx*stride;
 
 //  if( thidy == 0 && thidx + currow < rows  ){
 //      sh_max[thidx] = -1e37;
@@ -27,7 +28,7 @@ apply_rows_max(float* X, /** matrix to apply .. row major **/
   for(int chunk = 0; chunk < cols; chunk+=bdx){
   	  // get some values chunking accross rows ...
 	  if(currow+thidy < rows && chunk + thidx < cols){
-	  	shared_data[thidx*bdx + thidy] = X[(currow + thidy)*cols + chunk + thidx];}
+	  	shared_data[thidx*stride + thidy] = X[(currow + thidy)*cols + chunk + thidx];}
 	  __syncthreads();
 	  // get maximum in chunk ...
   	  if( thidy == 0 && thidx + currow < rows ){
@@ -39,7 +40,7 @@ apply_rows_max(float* X, /** matrix to apply .. row major **/
 	      for( int i = 0; i < bdx; i++){
 	      	   if(chunk + i < cols){
 	      	      cur_val = sh_max[thidx];
-		      new_val = shared_data[i*bdx + thidx];
+		      new_val = shared_data[i*stride + thidx];
 		      if( cur_val < new_val ){
 		         sh_max[thidx] = new_val;
 			 argmax = chunk + i;
