@@ -43,8 +43,8 @@ while True:
     
     task = np.array(0, dtype='i')
     comm.Recv([task, MPI.INT], source=0, tag=11) # -1 -- kill, 0 -- init
-    print 'got task'
-    print task
+    #print 'got task'
+    #print task
 
     # process task or pill
     if task == -1:
@@ -52,11 +52,11 @@ while True:
     elif task == 0:
         params = np.empty(3, dtype='i')
         comm.Recv([params, MPI.INT], source=0, tag=12)
-        print 'got params'
+        #print 'got params'
         dim0, dim1, n_dev_num = params
-        print dim0
-        print dim1
-        print n_dev_num
+        #print dim0
+        #print dim1
+        #print n_dev_num
         # no reinit for 2nd dataset ... 
         if _init is False:
             dev_num = int(n_dev_num)
@@ -70,16 +70,16 @@ while True:
             
         data = np.empty(dim0*dim1, dtype='d')
         comm.Recv([data, MPI.DOUBLE], source=0, tag=13)
-        print data
-        print 'got data'
+        #print data
+        #print 'got data'
         data = data.reshape(dim0, dim1)
         alldata.append(data)
         gdata.append(to_gpu(np.asarray(data, dtype=np.float32)))
 
         task = np.array(dataind, dtype='i')
         comm.Send([task, MPI.INT], dest=0, tag=14)
-        print 'sent result'
-        #print 'memory on dev ' + str(dev_num) + ': ' + str(drv.mem_get_info())
+        #print 'sent result'
+        ##print 'memory on dev ' + str(dev_num) + ': ' + str(drv.mem_get_info())
     elif task == 1:
         results = []
 
@@ -136,10 +136,10 @@ while True:
                 del densities
 
                 #comm.send(task, dest=0, tag=13) # return it
-                #print 'memory on dev ' + str(dev_num) + ': ' + str(drv.mem_get_info())
+                ##print 'memory on dev ' + str(dev_num) + ': ' + str(drv.mem_get_info())
 
             elif ttype==0:
-                print 'starting bem'
+                #print 'starting bem'
                 densities = gpustats.mvnpdf_multi(gdata[dataind], mu, Sigma,
                                                   weights = w.flatten(), get=False, logged=True,
                                                   order='C')
@@ -176,7 +176,7 @@ while True:
         for subresult in results:
             tag = 21
             for res in subresult:
-                print 'sending results tag ' + str(tag)
+                ##print 'sending results tag ' + str(tag)
                 if np.issubdtype(res.dtype, 'float'):
                     comm.Send([res, MPI.DOUBLE], dest=0, tag=tag)
                 else:

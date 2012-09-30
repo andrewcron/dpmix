@@ -34,14 +34,14 @@ def init_GPUWorkers(data, devslist=None):
             task = np.array(0, dtype='i')
             #task = Init_Task(todat.shape[0], todat.shape[1], int(devslist[i]))
             workers.Isend([task, MPI.INT], dest=i, tag=11)
-            print 'sent task'
+            #print 'sent task'
             params = np.array([todat.shape[0], todat.shape[1], int(devslist[i])], dtype='i')
             workers.Send([params, MPI.INT], dest=i, tag=12)
-            print 'params'
+            #print 'params'
             workers.Send([todat, MPI.DOUBLE], dest=i, tag=13)
-            print 'data now waiting'
+            #print 'data now waiting'
             workers.Recv([task, MPI.INT], source=i, tag=14)
-            print 'made it'
+            #print 'made it'
 
             i+=1
     else: ## HDP .. one or more datasets per GPU
@@ -61,7 +61,7 @@ def init_GPUWorkers(data, devslist=None):
             workers.Recv([dind, MPI.INT], source=thd, tag=14)
             _dataind[i] = dind
             _datadevmap[i] = thd
-    print 'initialized!'
+    #print 'initialized!'
     return workers
 
 def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
@@ -97,7 +97,7 @@ def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
 
     for i in xrange(ndev):
         numres = np.array(0, dtype='i'); workers.Recv([numres,MPI.INT], source=i, tag=13)
-        print numres
+        #print numres
         #results = workers.recv(source=i, tag=13)
         for it in range(numres):
             rnobs = np.array(0, dtype='i'); workers.Recv([rnobs,MPI.INT], source=i, tag=21)
