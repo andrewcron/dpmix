@@ -3,7 +3,7 @@ from time import time
 from dpmix import HDPNormalMixture
 
 # load data
-files = ['AMJ_5L_CMV pp65.npy',
+files = ['AMJ_5L_CMV_pp65.npy',
          'AMJ_5L_Costim.npy', 
          'AMJ_5L_SEB.npy']
 data = [np.load(fl) for fl in files]
@@ -26,39 +26,39 @@ if __name__ == '__main__':
 
     t1 = time()
     mcmc = HDPNormalMixture(data, ncomp=256, gpu=[0,1,2], 
-                            parallel=True, verbose=100)
-    mcmc.sample(25, nburn=25, tune_interval=50)
+                            parallel=True, verbose=1)
+    mcmc.sample(1000, nburn=2000, tune_interval=50)
     imcmc = HDPNormalMixture(mcmc, verbose=100)
-    imcmc.sample(250, nburn=0, ident=True)
+    imcmc.sample(1000, nburn=0, ident=True)
     t1 = time() - t1
     print 'ALL GPU: ' + str(t1)
 
     t2 = time()
     mcmc = HDPNormalMixture(data, ncomp=256, gpu=[0], 
                             parallel=False, verbose=100)
-    mcmc.sample(250, nburn=500, tune_interval=50)
+    mcmc.sample(1000, nburn=2000, tune_interval=50)
     imcmc = HDPNormalMixture(mcmc, verbose=100)
-    imcmc.sample(250, nburn=0, ident=True)
+    imcmc.sample(1000, nburn=0, ident=True)
     t2 = time() - t2
     print 'One GPU: ' + str(t2)
 
     t4 = time()
     mcmc = HDPNormalMixture(data, ncomp=256, gpu=False, 
                             parallel=False, verbose=10)
-    mcmc.sample(25, nburn=50, tune_interval=50)
+    mcmc.sample(100, nburn=200, tune_interval=25)
     imcmc = HDPNormalMixture(mcmc, verbose=10)
-    imcmc.sample(25, nburn=0, ident=True)
+    imcmc.sample(100, nburn=0, ident=True)
     t4 = time() - t4
-    print 'One CPU: ' + str(t4)
+    print 'One CPU: ' + str(t4*10)
 
     t3 = time()
     mcmc = HDPNormalMixture(data, ncomp=256, gpu=False, 
                             parallel=True, verbose=10)
-    mcmc.sample(25, nburn=50, tune_interval=50)
+    mcmc.sample(100, nburn=200, tune_interval=25)
     imcmc = HDPNormalMixture(mcmc, verbose=10)
-    imcmc.sample(25, nburn=0, ident=True)
+    imcmc.sample(100, nburn=0, ident=True)
     t3 = time() - t3
-    print 'ALL CPU: ' + str(t3)
+    print 'ALL CPU: ' + str(t3*10)
     
 
 

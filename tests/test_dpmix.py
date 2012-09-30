@@ -68,7 +68,7 @@ if __name__ == '__main__':
     print bem.mu
 
     ident_mcmc = DPNormalMixture(bem, verbose=verbosity)
-    ident_mcmc.sample(100, nburn=0, ident=False)
+    ident_mcmc.sample(100, nburn=0, ident=True)
     print ident_mcmc.weights[-1]
     print ident_mcmc.mu[-1]
 

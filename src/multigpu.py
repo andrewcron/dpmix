@@ -31,10 +31,17 @@ def init_GPUWorkers(data, devslist=None):
         #launch threads
         for i in xrange(ndev):
             todat = np.asarray(data[partitions[i]:partitions[i+1]], dtype='d')
-            task = Init_Task(todat.shape[0], todat.shape[1], int(devslist[i]))
-            workers.isend(task, dest=i, tag=11)
-            workers.Send([todat, MPI.DOUBLE], dest=i, tag=12)
-            workers.recv(source=i, tag=13)
+            task = np.array(0, dtype='i')
+            #task = Init_Task(todat.shape[0], todat.shape[1], int(devslist[i]))
+            workers.Isend([task, MPI.INT], dest=i, tag=11)
+            print 'sent task'
+            params = np.array([todat.shape[0], todat.shape[1], int(devslist[i])], dtype='i')
+            workers.Send([params, MPI.INT], dest=i, tag=12)
+            print 'params'
+            workers.Send([todat, MPI.DOUBLE], dest=i, tag=13)
+            print 'data now waiting'
+            workers.Recv([task, MPI.INT], source=i, tag=14)
+            print 'made it'
 
             i+=1
     else: ## HDP .. one or more datasets per GPU
@@ -43,12 +50,18 @@ def init_GPUWorkers(data, devslist=None):
             dev = int(devslist[i%len(devslist)])
             thd = i%len(devslist)
             todat = np.asarray(data[i], dtype='d')
-            task = Init_Task(todat.shape[0], todat.shape[1], dev)
-            workers.isend(task, dest=thd, tag=11)
-            workers.Send([todat, MPI.DOUBLE], dest=thd, tag=12)
-            _dataind[i] = workers.recv(source=thd, tag=13)
+            task = np.array(0, dtype='i')
+            workers.Isend([task, MPI.INT], dest=thd, tag=11)
+            params = np.array([todat.shape[0], todat.shape[1], dev], dtype='i')
+            workers.Send([params, MPI.INT], dest=thd, tag=12)
+            #task = Init_Task(todat.shape[0], todat.shape[1], dev)
+            #workers.isend(task, dest=thd, tag=11)
+            workers.Send([todat, MPI.DOUBLE], dest=thd, tag=13)
+            dind = np.array(0, dtype='i')
+            workers.Recv([dind, MPI.INT], source=thd, tag=14)
+            _dataind[i] = dind
             _datadevmap[i] = thd
-
+    print 'initialized!'
     return workers
 
 def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
@@ -67,23 +80,35 @@ def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
         tasks[_datadevmap[i]].append(MCMC_Task(Sigma.shape[0], relabel, _dataind[i], i))
 
     for i in xrange(ndev):
-        workers.isend(tasks[i], dest=i, tag=11)
+        # send the number of tasks
+        tsk = np.array(1, dtype='i'); 
+        workers.Isend([tsk, MPI.INT], dest=i, tag=11)
+        numtasks = np.array(len(tasks[i]), dtype='i')
+        workers.Send([numtasks,MPI.INT], dest=i, tag=12)
+
         for tsk in tasks[i]:
-            gid = tsk.gid
-            workers.Send([np.asarray(w[gid].copy(),dtype='d'), MPI.DOUBLE], dest=i, tag=21)
+            
+            params = np.array([tsk.dataind, tsk.ncomp, int(tsk.relabel)+1, tsk.gid], dtype='i')
+            workers.Send([params, MPI.INT], dest=i, tag=13)
+
+            workers.Send([np.asarray(w[tsk.gid].copy(),dtype='d'), MPI.DOUBLE], dest=i, tag=21)
             workers.Send([np.asarray(mu, dtype='d'), MPI.DOUBLE], dest=i, tag=22)
             workers.Send([np.asarray(Sigma, dtype='d'), MPI.DOUBLE], dest=i, tag=23)
 
     for i in xrange(ndev):
-        results = workers.recv(source=i, tag=13)
-        for res in results:
-            labs = np.empty(res.nobs, dtype='i')
-            workers.Recv([labs, MPI.INT], source=i, tag=21)
-            labels[res.gid] = labs
+        numres = np.array(0, dtype='i'); workers.Recv([numres,MPI.INT], source=i, tag=13)
+        print numres
+        #results = workers.recv(source=i, tag=13)
+        for it in range(numres):
+            rnobs = np.array(0, dtype='i'); workers.Recv([rnobs,MPI.INT], source=i, tag=21)
+            labs = np.empty(rnobs, dtype='i')
+            workers.Recv([labs, MPI.INT], source=i, tag=22)
+            rgid = np.array(0, dtype='i'); workers.Recv([rgid,MPI.INT], source=i, tag=23)
+            labels[rgid] = labs
             if relabel:
-                cZ = np.empty(res.nobs, dtype='i')
-                workers.Recv([cZ, MPI.INT], source=i, tag=22)
-                Z[res.gid] = cZ
+                cZ = np.empty(rnobs, dtype='i')
+                workers.Recv([cZ, MPI.INT], source=i, tag=24)
+                Z[rgid] = cZ
 
 
     return labels, Z 
@@ -93,26 +118,38 @@ def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
     ndev = workers.remote_group.size
     nobs, i = 0, 0
     partitions = [0]
-    theta = [MCMC_Task(len(w), relabel)]
+
     for i in xrange(ndev):
         # give new params
-        workers.isend(theta, dest=i, tag=11)
+        task = np.array(1, dtype='i')
+        workers.Isend([task,MPI.INT], dest=i, tag=11)
+        numtasks = np.array(1, dtype='i')
+        workers.Send([numtasks,MPI.INT], dest=i, tag=12)
+        params = np.array([0, len(w), int(relabel)+1, 1], dtype='i')
+        workers.Send([params,MPI.INT], dest=i, tag=13)
+
+        # give bigger params
         workers.Send([np.asarray(w,dtype='d'), MPI.DOUBLE], dest=i, tag=21)
         workers.Send([np.asarray(mu,dtype='d'), MPI.DOUBLE], dest=i, tag=22)
         workers.Send([np.asarray(Sigma,dtype='d'), MPI.DOUBLE], dest=i, tag=23)
     #gather the results
-    theta = []; labs=[]; Zs=[];
+
+    labs=[]; Zs=[];
     for i in xrange(ndev):
-        theta.append(workers.recv(source=i, tag=13))
-        nobs += theta[-1][0].nobs
+        numres = np.array(0, dtype='i'); workers.Recv(numres, source=i, tag=13)
+        rnobs = np.array(0, dtype='i'); workers.Recv(rnobs, source=i, tag=21)
+
+        nobs += rnobs
         partitions.append(nobs)
-        lab = np.empty(theta[-1][0].nobs, dtype='i')
-        workers.Recv([lab, MPI.INT], source=i, tag=21)
+        lab = np.empty(rnobs, dtype='i')
+        workers.Recv([lab, MPI.INT], source=i, tag=22)
         labs.append(lab)
+        gid = np.array(0, dtype='i'); workers.Recv([gid, MPI.INT], tag=23)
         if relabel:
-            Z = np.empty(theta[-1][0].nobs, dtype='i')
-            workers.Recv([Z, MPI.INT], source=i, tag=22)
+            Z = np.empty(rnobs, dtype='i')
+            workers.Recv([Z, MPI.INT], source=i, tag=24)
             Zs.append(Z)
+
 
     res = np.zeros(nobs, dtype='i')
     if relabel:
@@ -134,32 +171,43 @@ def get_expected_labels_GPU(workers, w, mu, Sigma):
     ndim = Sigma.shape[1]
     nobs, i = 0, 0
     partitions = [0]
-    theta = [BEM_Task(len(w))]
+
     for i in xrange(ndev):
         # give new params
-        workers.isend(theta, dest=i, tag=11)
+        task = np.array(1, dtype='i')
+        workers.Isend([task,MPI.INT], dest=i, tag=11)
+        numtasks = np.array(1, dtype='i')
+        workers.Send([numtasks,MPI.INT], dest=i, tag=12)
+        params = np.array([0, len(w), 0], dtype='i')
+        workers.Send([params,MPI.INT], dest=i, tag=13)
+
+        # give bigger params
         workers.Send([np.asarray(w,dtype='d'), MPI.DOUBLE], dest=i, tag=21)
         workers.Send([np.asarray(mu,dtype='d'), MPI.DOUBLE], dest=i, tag=22)
         workers.Send([np.asarray(Sigma,dtype='d'), MPI.DOUBLE], dest=i, tag=23)
 
     #gather results
-    theta = []; xbars = []; densities=[]; cts = []
+    xbars = []; densities=[]; cts = []
     ll = 0
 
     for i in xrange(ndev):
-        theta.append(workers.recv(source=i, tag=13))
-        nobs += theta[-1][0].nobs
-        ll += theta[-1][0].ll
+        numres = np.array(0, dtype='i'); workers.Recv(numres, source=i, tag=13)
+        rnobs = np.array(0, dtype='i'); workers.Recv(rnobs, source=i, tag=21)
+
+        nobs += rnobs
         partitions.append(nobs)
         ct = np.empty(ncomp, dtype='d')
-        workers.Recv([ct, MPI.DOUBLE], source=i, tag=21)
+        workers.Recv([ct, MPI.DOUBLE], source=i, tag=22)
         cts.append(ct)
         xbar = np.empty(ncomp*ndim, dtype='d')
-        workers.Recv([xbar, MPI.DOUBLE], source=i, tag=22)
+        workers.Recv([xbar, MPI.DOUBLE], source=i, tag=23)
         xbars.append(xbar.reshape(ncomp, ndim))
-        dens = np.empty(theta[-1][0].nobs*ncomp, dtype='d')
-        workers.Recv([dens, MPI.DOUBLE], source=i, tag=23)
-        densities.append(dens.reshape(theta[-1][0].nobs, ncomp))
+        dens = np.empty(rnobs*ncomp, dtype='d')
+        workers.Recv([dens, MPI.DOUBLE], source=i, tag=24)
+        densities.append(dens.reshape(rnobs, ncomp))
+        nll = np.array(0, dtype='d'); workers.Recv([nll, MPI.DOUBLE], source=i, tag=25)
+        ll += nll
+        gid = np.array(0, dtype='i'); workers.Recv([gid, MPI.INT], tag=26)
 
     dens = np.zeros((nobs, ncomp), dtype='d')
     xbar = np.zeros((ncomp, ndim), dtype='d')
@@ -175,9 +223,9 @@ def get_expected_labels_GPU(workers, w, mu, Sigma):
 def kill_GPUWorkers(workers):
     #poison pill to each child 
     ndev = workers.remote_group.size
-    msg = None
+    msg = np.array(-1, dtype='i')
     for i in xrange(ndev):
-        workers.isend(msg, dest=i, tag=11)
+        workers.Isend([msg,MPI.INT], dest=i, tag=11)
     workers.Disconnect()
 
     
