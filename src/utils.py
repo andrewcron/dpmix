@@ -27,11 +27,11 @@ def select_gpu(devNum):
         cudainit.device = newDev
 
 
-@cython.compile
-def _get_cost(x,y,C):
-    n = len(x)
-    for i in range(n):
-        C[x[i], y[i]] -= 1 
+# @cython.compile
+# def _get_cost(x,y,C):
+#     n = len(x)
+#     for i in range(n):
+#         C[x[i], y[i]] -= 1 
 
 
 def mvn_weighted_logged(data, means, covs, weights):

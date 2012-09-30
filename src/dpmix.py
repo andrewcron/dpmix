@@ -9,7 +9,7 @@ from __future__ import division
 import numpy as np
 import numpy.random as npr
 
-from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, _get_cost, select_gpu
+from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, select_gpu#, _get_cost
 from multicpu import CPUWorker, CompUpdate
 
 from wishart import invwishartrand, invwishartrand_prec
@@ -18,7 +18,7 @@ import multiprocessing
 import cython
 
 try:
-    from munkres import munkres
+    from munkres import munkres, _get_cost
 except ImportError:
     _has_munkres = False
 
