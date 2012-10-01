@@ -299,7 +299,7 @@ class DPNormalMixture(object):
             densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
             #self._densities = densities
             if ident:
-                Z = densities.argmax(1)
+                Z = np.asarray(densities.argmax(1),dtype='i')
             else:
                 Z = None
             return sample_discrete(densities).squeeze(), Z

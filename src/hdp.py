@@ -297,7 +297,7 @@ class HDPNormalMixture(DPNormalMixture):
                 densities = mvn_weighted_logged(self.data[j], mu, Sigma, weights[j])
                 labels[j] = sample_discrete(densities).squeeze()
                 if self._ident:
-                    zhat.append(densities.argmax(1))
+                    zhat.append(np.asarray(densities.argmax(1),dtype='i'))
                 
         return labels, zhat
 

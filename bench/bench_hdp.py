@@ -25,16 +25,16 @@ for d in data:
 if __name__ == '__main__':
 
     t1 = time()
-    mcmc = HDPNormalMixture(data, ncomp=256, gpu=[0,1,2], 
-                            parallel=True, verbose=1)
+    mcmc = HDPNormalMixture(data, ncomp=100, gpu=[0,1,2], 
+                            parallel=True, verbose=100)
     mcmc.sample(1000, nburn=2000, tune_interval=50)
     imcmc = HDPNormalMixture(mcmc, verbose=100)
     imcmc.sample(1000, nburn=0, ident=True)
     t1 = time() - t1
     print 'ALL GPU: ' + str(t1)
-
+    
     t2 = time()
-    mcmc = HDPNormalMixture(data, ncomp=256, gpu=[0], 
+    mcmc = HDPNormalMixture(data, ncomp=100, gpu=[0], 
                             parallel=False, verbose=100)
     mcmc.sample(1000, nburn=2000, tune_interval=50)
     imcmc = HDPNormalMixture(mcmc, verbose=100)
@@ -43,22 +43,22 @@ if __name__ == '__main__':
     print 'One GPU: ' + str(t2)
 
     t4 = time()
-    mcmc = HDPNormalMixture(data, ncomp=256, gpu=False, 
+    mcmc = HDPNormalMixture(data, ncomp=100, gpu=False, 
                             parallel=False, verbose=10)
-    mcmc.sample(100, nburn=200, tune_interval=25)
+    mcmc.sample(50, nburn=100, tune_interval=25)
     imcmc = HDPNormalMixture(mcmc, verbose=10)
-    imcmc.sample(100, nburn=0, ident=True)
+    imcmc.sample(50, nburn=0, ident=True)
     t4 = time() - t4
-    print 'One CPU: ' + str(t4*10)
+    print 'One CPU: ' + str(t4*20)
 
     t3 = time()
-    mcmc = HDPNormalMixture(data, ncomp=256, gpu=False, 
+    mcmc = HDPNormalMixture(data, ncomp=100, gpu=False, 
                             parallel=True, verbose=10)
-    mcmc.sample(100, nburn=200, tune_interval=25)
+    mcmc.sample(50, nburn=100, tune_interval=25)
     imcmc = HDPNormalMixture(mcmc, verbose=10)
-    imcmc.sample(100, nburn=0, ident=True)
+    imcmc.sample(50, nburn=0, ident=True)
     t3 = time() - t3
-    print 'ALL CPU: ' + str(t3*10)
+    print 'ALL CPU: ' + str(t3*20)
     
 
 
