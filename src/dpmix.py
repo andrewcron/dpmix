@@ -169,7 +169,7 @@ class DPNormalMixture(object):
             # draw from prior .. bad idea for vague prior ??? 
             Sigma0 = np.empty((self.ncomp, self.ndim, self.ndim))
             for j in xrange(self.ncomp):
-                Sigma0[j] = invwishartrand(nu0 + 1 + self.ndim, Phi0[j])
+                Sigma0[j] = invwishartrand_prec(nu0 + 1 + self.ndim, Phi0[j])
             #Sigma0 = Phi0.copy()
 
         # starting values, are these sensible?

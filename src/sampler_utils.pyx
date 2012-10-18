@@ -2,7 +2,7 @@ import numpy as np
 cimport numpy as np
 cimport cython
 
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport calloc, malloc, free
 from libc.math cimport sqrt
 
 
@@ -14,22 +14,23 @@ cdef mat wishartrand(double nu, mat phi, rng_sampler[double] rng):
     cdef int dim = phi.n_rows
     cdef mat phi_chol = chol(phi)
 
-    cdef double *cfoo = <double*>malloc(dim*dim*sizeof(double))
+    cdef double *cfoo = <double*>calloc(dim*dim, sizeof(double))
     cdef double[:,:] foo = <double[:dim,:dim]> cfoo
 
     cdef int i,j
     for i in range(dim):
         for j in range(i+1):
             if i == j:
-                foo[i,j] = sqrt(rng.chisq(nu-i+2))
+                foo[i,j] = sqrt(rng.chisq(nu-<double>i))
             else:
                 foo[i,j] = rng.normal(0, 1)
                 
+
     cdef mat *mfoo = new mat(cfoo, dim, dim, False, True)
-    cdef mat tmp = phi_chol * deref(mfoo)
-    
+    cdef mat tmp =  deref(mfoo) * phi_chol
+
     free(cfoo)
-    return tmp * tmp.t()
+    return tmp.t() * tmp
 
 cdef mat invwishartrand(double nu, mat phi, rng_sampler[double] rng):
     return inv(wishartrand(nu, phi, rng))
@@ -78,14 +79,32 @@ cdef vec mvnormrand_prec(vec mu, mat Tau, rng_sampler[double] rng):
     return mvnormrand_eigs(mu, evals, evecs, rng)
 
 
-def pywishartrand(double nu, np.ndarray[np.double_t, ndim=2] Phi):
+def pyiwishartrand(double nu, np.ndarray[np.double_t, ndim=2] Phi):
     #cdef rng r
     cdef rng_sampler[double] * R = new rng_sampler[double]()
-    cdef mat result = wishartrand(nu, numpy_to_mat(Phi), deref(R))
+    cdef mat result = invwishartrand(nu, numpy_to_mat(Phi), deref(R))
     return mat_to_numpy(result, None)
 
-def pymvnormrand(np.ndarray[np.double_t, ndim=1] mu,
-                 np.ndarray[np.double_t, ndim=2] Sigma):
-    pass
+def pyiwishartrand_prec(double nu, np.ndarray[np.double_t, ndim=2] Phi):
+    #cdef rng r
+    cdef rng_sampler[double] * R = new rng_sampler[double]()
+    cdef mat result = invwishartrand_prec(nu, numpy_to_mat(Phi), deref(R))
+    return mat_to_numpy(result, None)
+
+def pymvnorm(np.ndarray[np.double_t, ndim=1] mu,
+              np.ndarray[np.double_t, ndim=2] Sigma):
+
+    cdef rng_sampler[double] * R = new rng_sampler[double]()
+    cdef vec result = mvnormrand(numpy_to_vec(mu), numpy_to_mat(Sigma), deref(R))
+    return vec_to_numpy(result, None)
+
+def pymvnorm_prec(np.ndarray[np.double_t, ndim=1] mu,
+              np.ndarray[np.double_t, ndim=2] Sigma):
+
+    cdef rng_sampler[double] * R = new rng_sampler[double]()
+    cdef vec result = mvnormrand_prec(numpy_to_vec(mu), numpy_to_mat(Sigma), deref(R))
+    return vec_to_numpy(result, None)
+
+
 
 
