@@ -8,6 +8,8 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Distutils import build_ext
 from numpy import get_include
+from cyarma import include_dir as arma_dir
+from cyrand import include_dir as rng_dir
 
 setup(name='dpmix',
       version='0.1',
@@ -26,7 +28,16 @@ setup(name='dpmix',
       package_data={'dpmix': ['cufiles/*.cu']},
       cmdclass = {'build_ext': build_ext},
       ext_modules = [Extension("dpmix.munkres", 
-                ["src/munkres.pyx", "src/cpp/Munkres.cpp"],
-                include_dirs = [get_include(), 'src/cpp'],
-                language='c++')],
+                               ["src/munkres.pyx", "src/cpp/Munkres.cpp"],
+                               include_dirs = [get_include(), 'src/cpp'],
+                               language='c++'),
+                     Extension("dpmix.sampler",
+                               ["src/sampler_utils.pyx"],
+                               include_dirs = [get_include(),
+                                               arma_dir, rng_dir,
+                                               '/usr/include',
+                                               '/opt/local/include'],
+                               library_dirs = ['/usr/lib', '/opt/local/lib'],
+                               libraries=['armadillo'],
+                               language='c++')],
       )
