@@ -6,6 +6,8 @@ Ishwaran & James (2001) Gibbs Sampling Methods for Stick-Breaking Priors
 """
 from __future__ import division
 
+import time
+
 import numpy as np
 import numpy.random as npr
 
@@ -322,8 +324,8 @@ class DPNormalMixture(object):
     def _update_mu_Sigma(self, mu, Sigma, labels, other_dat=None):
         is_hdp = isinstance(labels, list)
 
-        #mu_output = np.zeros((self.ncomp, self.ndim))
-        #Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim))
+        mu_output = np.zeros((self.ncomp, self.ndim)) ## comment out
+        Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim)) ## comment out
         if is_hdp:
             ct = np.zeros((len(labels), self.ncomp), dtype=np.int)
         else:
@@ -354,10 +356,7 @@ class DPNormalMixture(object):
                 num_jobs -= 1            
 
         else:
-            ct = sampler.sample_mu_Sigma(mu, Sigma, labels, data,
-                                    self.gamma[0], self.mu_prior_mean,
-                                    self._nu0, self._Phi0[0])
-        return ct
+#             t1 = time.time()
 #             for j in xrange(self.ncomp):
 #                 if is_hdp:
 #                     nobs = data.shape[0]
@@ -408,7 +407,13 @@ class DPNormalMixture(object):
 #                     ct[:, j] = count
 #                 else:
 #                     ct[j] = count
-
+#             print "old time " + str(time.time() - t1)
+            #t2 = time.time()
+            ct = sampler.sample_mu_Sigma(mu, Sigma, labels, data,
+                                    self.gamma[0], self.mu_prior_mean,
+                                    self._nu0, self._Phi0[0])
+            #print "my time " + str(time.time() - t2)
+            return ct
 
 
 

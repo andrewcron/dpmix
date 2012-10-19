@@ -52,16 +52,17 @@ if __name__ == '__main__':
     ncomps = 3 # n mixture components
     npr.seed(datetime.now().microsecond)
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
-    data = data - data.mean(0)
-    data = data/data.std(0)
+    #data = data - data.mean(0)
+    #data = data/data.std(0)
 
     #import pdb
     #pdb.set_trace()
     print "use_gpu=" + str(use_gpu)
     mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
-    mcmc.sample(200,nburn=0)
+    mcmc.sample(100,nburn=0)
     print mcmc.mu[-1]
+    print mcmc.Sigma[-1]
 
     bem = BEM_DPNormalMixture(mcmc, verbose=verbosity)
     bem.optimize(maxiter=5)

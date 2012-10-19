@@ -1,6 +1,7 @@
 import numpy as np
 cimport numpy as np
 cimport cython
+from cython.parallel import prange
 
 from libc.stdlib cimport calloc, malloc, free
 from libc.math cimport sqrt
@@ -10,7 +11,7 @@ include "cyarma.pyx"
 include "random.pyx"
 
 @cython.boundscheck(False)
-cdef mat wishartrand(double nu, mat phi, rng_sampler[double] rng) nogil:
+cdef mat wishartrand(double nu, mat phi, rng_sampler[double] & rng) nogil:
     cdef int dim = phi.n_rows
     cdef mat phi_chol = chol(phi)
 
@@ -32,14 +33,18 @@ cdef mat wishartrand(double nu, mat phi, rng_sampler[double] rng) nogil:
     free(foo)
     return tmp.t() * tmp
 
-cdef mat invwishartrand(double nu, mat phi, rng_sampler[double] rng) nogil:
+cdef mat invwishartrand(double nu, mat & phi, rng_sampler[double] & rng)  nogil:
     return inv(wishartrand(nu, phi, rng))
 
-cdef mat invwishartrand_prec(double nu, mat phi, rng_sampler[double] rng) nogil:
+cdef mat invwishartrand_prec(double nu, mat & phi, rng_sampler[double] & rng)  nogil:
     return inv(wishartrand(nu, inv(phi), rng))
 
+cdef mat wishartrand_prec(double nu, mat & phi, rng_sampler[double] & rng)  nogil:
+    return wishartrand(nu, inv(phi), rng)
+
+
 @cython.boundscheck(False)
-cdef vec mvnormrand_eigs(vec mu, vec evals, mat evecs, rng_sampler[double] rng) nogil:
+cdef vec mvnormrand_eigs(vec & mu, vec & evals, mat & evecs, rng_sampler[double] & rng) nogil:
     # initialize
     cdef int i
     cdef int dim = mu.n_elem
@@ -55,7 +60,7 @@ cdef vec mvnormrand_eigs(vec mu, vec evals, mat evecs, rng_sampler[double] rng) 
     samp = samp + mu
     return samp
 
-cdef vec mvnormrand(vec mu, mat Sigma, rng_sampler[double] rng) nogil:
+cdef vec mvnormrand(vec & mu, mat & Sigma, rng_sampler[double] & rng)  nogil:
     cdef int dim = mu.n_elem
     cdef vec * evals_pt = new vec(dim)
     cdef vec evals = deref(evals_pt)
@@ -66,7 +71,7 @@ cdef vec mvnormrand(vec mu, mat Sigma, rng_sampler[double] rng) nogil:
 
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef vec mvnormrand_prec(vec mu, mat Tau, rng_sampler[double] rng) nogil:
+cdef vec mvnormrand_prec(vec & mu, mat & Tau, rng_sampler[double] & rng)  nogil:
     cdef int dim= mu.n_elem
     cdef int i 
     cdef vec * evals_pt = new vec(dim)
@@ -84,10 +89,10 @@ cdef void _sample_component(vec & mu, mat & Sigma,
                             mat & data, vec & labels, int cur_lab,
                             vec & count,
                             double gamma, vec & pr_mu,
-                            double & pr_nu, mat & pr_phi,
+                            double pr_nu, mat & pr_phi,
                             rng_sampler[double] & rng) nogil:
     ## this samples the normal paremters for one component
-    
+
     # initialize working memory
     cdef int i,j,k
     cdef double diff
@@ -109,55 +114,79 @@ cdef void _sample_component(vec & mu, mat & Sigma,
             nj += 1
             for j in range(p):
                 sumxj[j] += data[j + i*p]
+                diff = data[j+i*p]-mu[j]
                 for k in range(p):
-                    SS[k+j*p] += (data[j+i*p]-mu[j])*(data[k+i*p]-mu[k])
+                    SS[k+j*p] += diff*(data[k+i*p]-mu[k])
     ## sample Sigma!
     for j in range(p): # gets prior contribution
         diff = mu[j] - pr_mu[j]
         for k in range(p):
             SS[k+j*p] += (1/gamma) * diff * (mu[k] - pr_mu[k])
             SS[k+j*p] += pr_phi[k+j*p]
-    cdef mat new_Sigma = invwishartrand_prec(nj+p+pr_nu+2, SS, rng)
+    ## take advantage of free inverse
+    #cdef mat new_Sigma = invwishartrand_prec(nj+p+pr_nu+2, SS, rng)
+    cdef mat new_iSigma = wishartrand_prec(nj+p+pr_nu+2, SS, rng)
+    cdef vec * evals_pt = new vec(p)
+    cdef vec evals = deref(evals_pt)
+    cdef mat * evecs_pt = new mat(p, p)
+    cdef mat evecs = deref(evecs_pt)
+    eig_sym(evals, evecs, new_iSigma)
+    for j in range(p):
+        evals[j] = 1.0/evals[j]
+    
+    # get Sigma smart like ... or only keep inverse!!!! more work ...
+    cdef mat * new_Sigma_pt = new mat(p,p)
+    cdef mat new_Sigma = deref(new_Sigma_pt)
+    for j in range(p):
+        for i in range(j,p):
+            new_Sigma[i+j*p] = 0
+            for k in range(p):
+                new_Sigma[i+j*p] += evals[k]*evecs[i+k*p]*evecs[j+k*p]
+    for j in range(1,p):
+        for i in range(j):
+            new_Sigma[i+j*p] = new_Sigma[j+i*p]
+    
+    
     ## copy sampled Sigma over current sigma
     for j in range(p):
         for k in range(p):
             Sigma[k+j*p] = new_Sigma[k+j*p]
     ## sample mu!!
     cdef vec post_mean = ((pr_mu / gamma) + sumxj) / (1 / gamma + <double>nj)
-    cdef mat post_cov = Sigma  / (1 / gamma + <double>nj) 
-    cdef vec new_mu = mvnormrand(post_mean, post_cov, rng)
+    #cdef mat post_cov = Sigma / (1 / gamma + <double>nj)
+    evals = evals / (1/gamma + <double>nj)
+    #cdef vec new_mu = mvnormrand(post_mean, post_cov, rng)
+    cdef vec new_mu = mvnormrand_eigs(post_mean, evals, evecs, rng)
     ## copy sample mu over currect mu
     for j in range(p):
         mu[j] = new_mu[j]
     
     count[cur_lab] = <double>nj
 
-## CREATE SAFE VIEWS!!!
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef vec __sample_mu_Sigma(mat & mu, cube & Sigma, vec & labels, mat & data,
-                           double gamma, vec & pr_mu, double pr_nu, mat & pr_phi):
+cdef vec __sample_mu_Sigma(mat * mu, cube * Sigma, vec * labels, mat * data,
+                           double gamma, vec * pr_mu, double pr_nu, mat * pr_phi) nogil:
     cdef int k
     cdef rng_sampler[double] * R = new rng_sampler[double]()
     
     cdef int p = mu.n_rows
     cdef int ncomp = mu.n_cols
 
-    cdef vec * count_p = new vec(ncomp)
-    cdef vec count = deref(count_p)
+    cdef vec * count = new vec(ncomp)
+    #cdef vec count = deref(count_p)
 
     cdef vec * cmu
     cdef mat * cSigma
 
-    for k in range(ncomp):
+    for k in prange(ncomp):
         cSigma = cube_slice_view(Sigma, k)
         cmu = mat_col_view(mu,k)
         _sample_component(deref(cmu), deref(cSigma),
-                          data, labels, k, count,
-                          gamma, pr_mu,
-                          pr_nu, pr_phi, deref(R))
-        
-    return count
+                          deref(data), deref(labels), k, deref(count),
+                          gamma, deref(pr_mu),
+                          pr_nu, deref(pr_phi), deref(R))
+    return deref(count)
 
 def sample_mu_Sigma(np.ndarray[np.double_t, ndim=2] mu_in,
                     np.ndarray[np.double_t, ndim=3] Sigma_in,
@@ -181,8 +210,8 @@ def sample_mu_Sigma(np.ndarray[np.double_t, ndim=2] mu_in,
     
 
     ## call
-    cdef vec ct = __sample_mu_Sigma(deref(mu), deref(Sigma), deref(labels), deref(data),
-                           gamma, deref(pr_mu), pr_nu, deref(pr_phi))
+    cdef vec ct = __sample_mu_Sigma(mu, Sigma, labels, data,
+                           gamma, pr_mu, pr_nu, pr_phi)
 
     return np.array(vec_to_numpy(ct,None),dtype=np.int)
 
@@ -205,14 +234,14 @@ def pymvnorm(np.ndarray[np.double_t, ndim=1] mu,
               np.ndarray[np.double_t, ndim=2] Sigma):
 
     cdef rng_sampler[double] * R = new rng_sampler[double]()
-    cdef vec result = mvnormrand(numpy_to_vec(mu), deref(numpy_to_mat(Sigma)), deref(R))
+    cdef vec result = mvnormrand(deref(numpy_to_vec(mu)), deref(numpy_to_mat(Sigma)), deref(R))
     return vec_to_numpy(result, None)
 
 def pymvnorm_prec(np.ndarray[np.double_t, ndim=1] mu,
               np.ndarray[np.double_t, ndim=2] Sigma):
 
     cdef rng_sampler[double] * R = new rng_sampler[double]()
-    cdef vec result = mvnormrand_prec(numpy_to_vec(mu), deref(numpy_to_mat(Sigma)), deref(R))
+    cdef vec result = mvnormrand_prec(deref(numpy_to_vec(mu)), deref(numpy_to_mat(Sigma)), deref(R))
     return vec_to_numpy(result, None)
 
 

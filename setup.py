@@ -41,5 +41,7 @@ setup(name='dpmix',
                                                '/opt/local/include'],
                                library_dirs = ['/usr/lib', '/opt/local/lib'],
                                libraries=['armadillo'],
-                               language='c++')],
+                               language='c++',
+                               extra_compile_args=['-fopenmp'],
+                               extra_link_args=['-fopenmp'])],
       )
