@@ -9,18 +9,19 @@ from __future__ import division
 import numpy as np
 import numpy.random as npr
 
-from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, select_gpu#, _get_cost
+from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, select_gpu
 from multicpu import CPUWorker, CompUpdate
 
 from wishart import invwishartrand, invwishartrand_prec
 
 import multiprocessing
-import cython
+import sampler
 
 try:
     from munkres import munkres, _get_cost
 except ImportError:
     _has_munkres = False
+    
 
 # check for gpustats compatability
 try:
@@ -241,7 +242,7 @@ class DPNormalMixture(object):
                     print i
 
             labels, zhat = self._update_labels(mu, Sigma, weights, ident)
-            mu, Sigma, counts = self._update_mu_Sigma(Sigma, labels)
+            counts = self._update_mu_Sigma(mu, Sigma, labels)
 
             stick_weights, weights = self._update_stick_weights(counts, alpha)
 
@@ -318,11 +319,11 @@ class DPNormalMixture(object):
         b = self.f - np.log(1 - V).sum()
         return npr.gamma(a, scale=1 / b)
 
-    def _update_mu_Sigma(self, Sigma, labels, other_dat=None):
+    def _update_mu_Sigma(self, mu, Sigma, labels, other_dat=None):
         is_hdp = isinstance(labels, list)
 
-        mu_output = np.zeros((self.ncomp, self.ndim))
-        Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim))
+        #mu_output = np.zeros((self.ncomp, self.ndim))
+        #Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim))
         if is_hdp:
             ct = np.zeros((len(labels), self.ncomp), dtype=np.int)
         else:
@@ -353,61 +354,61 @@ class DPNormalMixture(object):
                 num_jobs -= 1            
 
         else:
+            ct = sampler.sample_mu_Sigma(mu, Sigma, labels, data,
+                                    self.gamma[0], self.mu_prior_mean,
+                                    self._nu0, self._Phi0[0])
+        return ct
+#             for j in xrange(self.ncomp):
+#                 if is_hdp:
+#                     nobs = data.shape[0]
+#                     mask = np.zeros(nobs, dtype=np.bool)
+#                     count = np.zeros(len(labels), dtype=np.int)
+#                     cumobs = 0; ii = 0
+#                     for labs in labels:
+#                         submask = labs == j
+#                         mask[cumobs:(cumobs+len(labs))] = submask
+#                         count[ii] = np.sum(submask); 
+#                         cumobs+=len(labs); ii+=1
+#                 else:
+#                     mask = labels == j
+#                     count = np.sum(mask)
 
-            for j in xrange(self.ncomp):
-                if is_hdp:
-                    nobs = data.shape[0]
-                    mask = np.zeros(nobs, dtype=np.bool)
-                    count = np.zeros(len(labels), dtype=np.int)
-                    cumobs = 0; ii = 0
-                    for labs in labels:
-                        submask = labs == j
-                        mask[cumobs:(cumobs+len(labs))] = submask
-                        count[ii] = np.sum(submask); 
-                        cumobs+=len(labs); ii+=1
-                else:
-                    mask = labels == j
-                    count = np.sum(mask)
 
-
-                Xj = data[mask]
-                nj = len(Xj)
+#                 Xj = data[mask]
+#                 nj = len(Xj)
                 
-                sumxj = Xj.sum(0)
+#                 sumxj = Xj.sum(0)
 
-                gam = self.gamma[j]
-                mu_hyper = self.mu_prior_mean
+#                 gam = self.gamma[j]
+#                 mu_hyper = self.mu_prior_mean
 
-                post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
-                post_cov = 1 / (1 / gam + nj) * Sigma[j]
+#                 post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
+#                 post_cov = 1 / (1 / gam + nj) * Sigma[j]
 
-                new_mu = npr.multivariate_normal(post_mean, post_cov)
+#                 new_mu = npr.multivariate_normal(post_mean, post_cov)
                 
-                Xj_demeaned = Xj - new_mu
+#                 Xj_demeaned = Xj - new_mu
 
-                mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
-                data_SS = np.dot(Xj_demeaned.T, Xj_demeaned)
-                post_Phi = data_SS + mu_SS + self._Phi0[j]
+#                 mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
+#                 data_SS = np.dot(Xj_demeaned.T, Xj_demeaned)
+#                 post_Phi = data_SS + mu_SS + self._Phi0[j]
 
-                # symmetrize
-                post_Phi = (post_Phi + post_Phi.T) / 2
+#                 # symmetrize
+#                 post_Phi = (post_Phi + post_Phi.T) / 2
                 
-                # P(Sigma) ~ IW(nu + 2, nu * Phi)
-                # P(Sigma | theta, Y) ~
-                post_nu = nj + self.ndim + self._nu0 + 2
+#                 # P(Sigma) ~ IW(nu + 2, nu * Phi)
+#                 # P(Sigma | theta, Y) ~
+#                 post_nu = nj + self.ndim + self._nu0 + 2
 
-                new_Sigma = invwishartrand_prec(post_nu, post_Phi)
+#                 new_Sigma = invwishartrand_prec(post_nu, post_Phi)
 
-                mu_output[j] = new_mu
-                Sigma_output[j] = new_Sigma
-                if is_hdp:
-                    ct[:, j] = count
-                else:
-                    ct[j] = count
+#                 mu_output[j] = new_mu
+#                 Sigma_output[j] = new_Sigma
+#                 if is_hdp:
+#                     ct[:, j] = count
+#                 else:
+#                     ct[j] = count
 
-
-
-        return mu_output, Sigma_output, ct
 
 
 

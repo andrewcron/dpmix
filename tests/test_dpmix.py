@@ -6,15 +6,15 @@ Created on Mar 15, 2012
 '''
 import sys
 #sys.path.insert(0, '../build/lib.linux-x86_64-2.7/')
-#sys.path.insert(0, "../src")
+sys.path.insert(0, "./src")
 
 import numpy as np
 import numpy.random as npr
 import pymc as pm
 #
-#from dpmix import DPNormalMixture
-#from BEM import BEM_DPNormalMixture
-from dpmix import DPNormalMixture, BEM_DPNormalMixture
+from dpmix import DPNormalMixture
+from BEM import BEM_DPNormalMixture
+#from dpmix import DPNormalMixture, BEM_DPNormalMixture
 
 #import gpustats as gs
 
