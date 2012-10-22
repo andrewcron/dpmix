@@ -60,14 +60,14 @@ if __name__ == '__main__':
     print "use_gpu=" + str(use_gpu)
     mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
-    mcmc.sample(100,nburn=0)
+    mcmc.sample(10,nburn=0)
     print mcmc.mu[-1]
     print mcmc.Sigma[-1]
 
     bem = BEM_DPNormalMixture(mcmc, verbose=verbosity)
     bem.optimize(maxiter=5)
     print bem.mu
-
+    
     ident_mcmc = DPNormalMixture(bem, verbose=verbosity)
     ident_mcmc.sample(100, nburn=0, ident=True)
     print ident_mcmc.weights[-1]

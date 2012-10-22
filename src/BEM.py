@@ -10,7 +10,7 @@ import scipy.stats as stats
 from utils import mvn_weighted_logged
 from dpmix import DPNormalMixture
 
-from multicpu import BEMSigmaUpdate
+#from multicpu import BEMSigmaUpdate
 # check for gpustats compatability
 try:
     import pycuda
@@ -61,6 +61,7 @@ class BEM_DPNormalMixture(DPNormalMixture):
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
                  gpu=None, parallel=True, verbose=False):
 
+        parallel = False ## Need to cythonize .... 
         ## for now, initialization is exactly the same .... 
         super(BEM_DPNormalMixture, self).__init__(
             data, ncomp, gamma0, m0, nu0, Phi0, e0, f0,
@@ -73,10 +74,10 @@ class BEM_DPNormalMixture(DPNormalMixture):
         self.e_labels = np.tile(self.weights.flatten(), (self.nobs, 1))
         self.densities = None
 
-    def __del__(self):
-        if self.parallel:
-            for thd in self.workers:
-                thd.terminate()
+#     def __del__(self):
+#         if self.parallel:
+#             for thd in self.workers:
+#                 thd.terminate()
         #if self.gpu:
         #    if hasattr(self, 'gpu_workers'):
         #        kill_GPUWorkers(self.gpu_workers)
@@ -94,13 +95,13 @@ class BEM_DPNormalMixture(DPNormalMixture):
         #    self.g_ones = to_gpu(np.ones((self.ncomp,1), dtype=np.float32))
         #    self.g_ones_long = to_gpu(np.ones((self.nobs, 1), dtype=np.float32))
 
-        if self.parallel:
-            from multiprocessing import RawArray
-            self.shared_dens_mem = RawArray('d', self.nobs*self.ncomp)
-            self.shared_dens = np.frombuffer(self.shared_dens_mem).reshape(self.nobs, self.ncomp)
-            for w in self.workers:
-                w.set_dens(self.shared_dens_mem)
-                w.start()
+#         if self.parallel:
+#             from multiprocessing import RawArray
+#             self.shared_dens_mem = RawArray('d', self.nobs*self.ncomp)
+#             self.shared_dens = np.frombuffer(self.shared_dens_mem).reshape(self.nobs, self.ncomp)
+#             for w in self.workers:
+#                 w.set_dens(self.shared_dens_mem)
+#                 w.start()
 
         # start threads
         if self.gpu:
@@ -131,9 +132,9 @@ class BEM_DPNormalMixture(DPNormalMixture):
             ll_2 = self.log_posterior()
         if self.gpu:
             kill_GPUWorkers(self.gpu_workers)
-        if self.parallel:
-            for i in xrange(self.num_cores):
-                self.work_queue[i].put(None)
+#         if self.parallel:
+#             for i in xrange(self.num_cores):
+#                 self.work_queue[i].put(None)
                 
     def log_posterior(self):
         # just the log likelihood right now because im lazy ... 
@@ -169,27 +170,14 @@ class BEM_DPNormalMixture(DPNormalMixture):
     def maximize_Sigma(self):
         df = self.ct + self._nu0 + 2*self.ndim + 3
 
-        ## multithread? 
-        if self.parallel:
-            self.shared_dens[:] = self.densities
-            nthds = len(self.work_queue)
-            for j in xrange(self.ncomp):
-                self.work_queue[j%nthds].put(BEMSigmaUpdate(self.ct, self.xbar, self.Sigma[j], j))
-            num_jobs = self.ncomp
-            for j in xrange(self.ncomp):
-                result = self.result_queue[j%nthds].get()
-                j = result.comp
-                self.Sigma[j] = result.Sigma.copy()
-                num_jobs -= 1
-        else:
-            for j in xrange(self.ncomp):
-                if self.ct[j]>0.1:
-                    Xj_d = (self.data - self.xbar[j,:]/self.ct[j])
-                    SS = np.dot(Xj_d.T * self.densities[:,j].flatten(), Xj_d)
-                    SS += self._Phi0[j] + (self.ct[j]/(1+self.gamma[j]*self.ct[j]))*np.outer(
-                        (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
-                        (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
-                    self.Sigma[j] = SS / self.ct[j]
+        for j in xrange(self.ncomp):
+            if self.ct[j]>0.1:
+                Xj_d = (self.data - self.xbar[j,:]/self.ct[j])
+                SS = np.dot(Xj_d.T * self.densities[:,j].flatten(), Xj_d)
+                SS += self._Phi0[j] + (self.ct[j]/(1+self.gamma[j]*self.ct[j]))*np.outer(
+                    (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean,
+                    (1/self.ct[j])*self.xbar[j,:] - self.mu_prior_mean)
+                self.Sigma[j] = SS / self.ct[j]
 
     def maximize_weights(self):
         sm = np.sum(self.ct)

@@ -1,14 +1,30 @@
 import numpy as np
 cimport numpy as np
 cimport cython
+cimport openmp
 from cython.parallel import prange
+import multiprocessing
 
 from libc.stdlib cimport calloc, malloc, free
-from libc.math cimport sqrt
+from libc.math cimport sqrt, lgamma, log
 
 
 include "cyarma.pyx"
 include "random.pyx"
+
+cdef extern from "<vector>" namespace "std" nogil:
+    cdef cppclass vector[T]:
+        cppclass iterator:
+            T operator*()
+            iterator operator++()
+            bint operator==(iterator)
+            bint operator!=(iterator)
+        vector() nogil
+        void push_back(T&) nogil
+        T& operator[](int) nogil
+        T& at(int) nogil
+        iterator begin() nogil
+        iterator end() nogil
 
 @cython.boundscheck(False)
 cdef mat wishartrand(double nu, mat phi, rng_sampler[double] & rng) nogil:
@@ -86,19 +102,18 @@ cdef vec mvnormrand_prec(vec & mu, mat & Tau, rng_sampler[double] & rng)  nogil:
 @cython.boundscheck(False)
 @cython.cdivision(True)
 cdef void _sample_component(vec & mu, mat & Sigma,
-                            mat & data, vec & labels, int cur_lab,
-                            vec & count,
+                            mat & data, 
+                            double count, vector[int] & mask,
                             double gamma, vec & pr_mu,
                             double pr_nu, mat & pr_phi,
                             rng_sampler[double] & rng) nogil:
     ## this samples the normal paremters for one component
 
     # initialize working memory
-    cdef int i,j,k
+    cdef int i,j,k,ii,nj
     cdef double diff
     cdef int n = data.n_cols
     cdef int p = data.n_rows
-    cdef int nj = 0
     cdef vec * sumxj_p = new vec(p)
     cdef vec sumxj = deref(sumxj_p)
     cdef mat * SS_p = new mat(p,p)
@@ -108,15 +123,16 @@ cdef void _sample_component(vec & mu, mat & Sigma,
         for j in range(p):
             SS[j+i*p] = 0
 
-    # get sufficient statistics for data subset
-    for i in range(n):
-        if labels[i] == cur_lab:
-            nj += 1
+    # get sufficient statistics for data subset (if any data)
+    nj = <int>count
+    if nj > 0:
+        for i in range(nj):
+            ii = mask.at(i)
             for j in range(p):
-                sumxj[j] += data[j + i*p]
-                diff = data[j+i*p]-mu[j]
+                sumxj[j] += data[j + ii*p]
+                diff = data[j+ii*p]-mu[j]
                 for k in range(p):
-                    SS[k+j*p] += diff*(data[k+i*p]-mu[k])
+                    SS[k+j*p] += diff*(data[k+ii*p]-mu[k])
     ## sample Sigma!
     for j in range(p): # gets prior contribution
         diff = mu[j] - pr_mu[j]
@@ -161,39 +177,93 @@ cdef void _sample_component(vec & mu, mat & Sigma,
     for j in range(p):
         mu[j] = new_mu[j]
     
-    count[cur_lab] = <double>nj
-
 @cython.boundscheck(False)
 @cython.cdivision(True)
 cdef vec __sample_mu_Sigma(mat * mu, cube * Sigma, vec * labels, mat * data,
-                           double gamma, vec * pr_mu, double pr_nu, mat * pr_phi) nogil:
-    cdef int k
+                           double gamma, vec * pr_mu, double pr_nu, mat * pr_phi,
+                           vec * hdp_rngs, parallel=True, hdp=False):
+    cdef bool is_hdp
+    cdef int k, nthd, chunk, i, J, cnt
     cdef rng_sampler[double] * R = new rng_sampler[double]()
-    
     cdef int p = mu.n_rows
     cdef int ncomp = mu.n_cols
 
     cdef vec * count = new vec(ncomp)
+    cdef vec * hdp_count
+    cdef double * hdp_count_ptr
+    # hdp stuff ... 
+    if hdp:
+        J = hdp_rngs.n_elem
+        hdp_count = new vec(ncomp*J)
+        hdp_count_ptr = hdp_count.memptr()
+        for i in range(ncomp*J):
+            hdp_count_ptr[i] = 0
+        cnt = 0
+        is_hdp = True
+    else:
+        is_hdp = False
+    cdef double * count_ptr = count.memptr()
+    cdef double * labels_ptr = labels.memptr()
+
+    cdef vector[vector[int]] * mask = new vector[vector[int]]()
+    cdef vector[int] * cur_mask
+
+    for k in range(ncomp):
+        count_ptr[k]=0
+        cur_mask = new vector[int]()
+        mask.push_back(deref(cur_mask))
     #cdef vec count = deref(count_p)
 
     cdef vec * cmu
     cdef mat * cSigma
 
-    for k in prange(ncomp):
+    if parallel:
+        nthd = multiprocessing.cpu_count()
+        chunk = 1
+    else:
+        nthd = 1
+        chunk = ncomp
+
+    for i in range(data.n_cols):
+        k = <int>labels_ptr[i]
+        count_ptr[k] += 1
+        mask.at(k).push_back(i)
+        if is_hdp:
+            hdp_count_ptr[cnt*ncomp + k] += 1
+            if i >= hdp_rngs.at(cnt):
+                cnt += 1
+
+    for k in prange(ncomp,nogil=True, num_threads=nthd, schedule='dynamic', chunksize=chunk):
         cSigma = cube_slice_view(Sigma, k)
         cmu = mat_col_view(mu,k)
         _sample_component(deref(cmu), deref(cSigma),
-                          deref(data), deref(labels), k, deref(count),
+                          deref(data), deref(count)[k], deref(mask).at(k),
                           gamma, deref(pr_mu),
                           pr_nu, deref(pr_phi), deref(R))
-    return deref(count)
+    if is_hdp:
+        return deref(hdp_count)
+    else:
+        return deref(count)
 
 def sample_mu_Sigma(np.ndarray[np.double_t, ndim=2] mu_in,
                     np.ndarray[np.double_t, ndim=3] Sigma_in,
                     np.ndarray[np.int_t, ndim=1] labels_in,
                     np.ndarray[np.double_t, ndim=2] data_in,
                     double gamma, np.ndarray[np.double_t, ndim=1] pr_mu_in,
-                    double pr_nu, np.ndarray[np.double_t, ndim=2] pr_phi_in):
+                    double pr_nu, np.ndarray[np.double_t, ndim=2] pr_phi_in,
+                    parallel=True, np.ndarray[np.double_t, ndim=1] hdp_rngs_in=None):
+
+    cdef vec * hdp_rngs
+
+    cdef int J, K
+
+    if hdp_rngs_in is None:
+        hdp = False
+    else:
+        hdp = True
+        hdp_rngs = numpy_to_vec(hdp_rngs_in)
+        J = hdp_rngs.n_elem
+        K = mu_in.shape[0]
 
     ## this code just handles type casting
     ## will eventually handle hdp and parallel issues
@@ -207,14 +277,44 @@ def sample_mu_Sigma(np.ndarray[np.double_t, ndim=2] mu_in,
     cdef mat * data = numpy_to_mat(data_in.T)
     cdef vec * pr_mu = numpy_to_vec(pr_mu_in)
     cdef mat * pr_phi = numpy_to_mat(pr_phi_in.T)
-    
+    cdef vec ct
 
     ## call
-    cdef vec ct = __sample_mu_Sigma(mu, Sigma, labels, data,
-                           gamma, pr_mu, pr_nu, pr_phi)
+    if hdp:
+        ct = __sample_mu_Sigma(mu, Sigma, labels, data,
+                               gamma, pr_mu, pr_nu, pr_phi, hdp_rngs, parallel, True)
+        return np.array(vec_to_numpy(ct, None), dtype=np.int).reshape(J,K)
+    else:
+        ct = __sample_mu_Sigma(mu, Sigma, labels, data,
+                               gamma, pr_mu, pr_nu, pr_phi, hdp_rngs, parallel)
+        return np.array(vec_to_numpy(ct,None),dtype=np.int)
 
-    return np.array(vec_to_numpy(ct,None),dtype=np.int)
+############### HDP Samplers ######################
 
+cdef inline double log_beta_pdf(double x, double a, double b):
+    return lgamma(a+b) - lgamma(a) - lgamma(b) + (a-1)*log(x) + (b-1)*log(x-1)
+
+cdef double beta_post(np.ndarray[np.double_t, ndim=1] & stick_beta,
+                      np.ndarray[np.double_t, ndim=1] & beta,
+                      np.ndarray[np.double_t, ndim=2] & stick_weights,
+                      double & alpha0, double & alpha):
+    cdef int j
+    cdef double a, b
+    cdef int J = stick_weights.shape[0]
+    cdef int k = stick_weights.shape[1]
+    cdef double lpost = 0.0
+    cdef double cumsum = 0.0
+
+    for j in range(J-1):
+        cumsum += beta[j]
+        a = alpha0*beta[j]
+        b = alpha0*(1-cumsum)
+        for i in range(k-1):
+            lpost += log_beta_pdf(sitck_weights[j,i], a, b)
+        lpost += log_beta_pdf(stick_beta[j], 1.0, alpha)
+        
+    return lpost 
+               
 
 # ############ some python functions for testing ############
 

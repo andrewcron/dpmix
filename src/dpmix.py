@@ -12,11 +12,11 @@ import numpy as np
 import numpy.random as npr
 
 from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, select_gpu
-from multicpu import CPUWorker, CompUpdate
+#from multicpu import CPUWorker, CompUpdate
 
 from wishart import invwishartrand, invwishartrand_prec
 
-import multiprocessing
+#import multiprocessing
 import sampler
 
 try:
@@ -101,6 +101,8 @@ class DPNormalMixture(object):
                 self.dev_list = np.unique(data.dev_list)
             self.parallel = data.parallel
         else:
+            if gpu and not _has_gpu:
+                print 'Warning: GPU load failed.'
             if _has_gpu:
                 self.dev_list = np.asarray((0), dtype=np.int); self.dev_list.shape=1
                 if gpu is not None:
@@ -144,19 +146,19 @@ class DPNormalMixture(object):
             self.data = self.data.copy()
         
         ## multiCPU stuf
-        if self.parallel:
-            self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
-            compsperdev = self.ncomp / self.num_cores
-            self.work_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
-            self.result_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
-            self.workers = [ CPUWorker(self.data, self.gamma, self.mu_prior_mean, 
-                                       self._Phi0, self._nu0, self.work_queue[i], self.result_queue[i])
-                             for i in xrange(self.num_cores) ]
-            self.compsdevmap = {}; cumcomps = 0
-            for i in xrange(self.num_cores):
-                self.compsdevmap[i] = [int(cumcomps), int(min(cumcomps+compsperdev, self.ncomp))]
-                cumcomps += compsperdev
-            self.compsdevmap[self.num_cores-1][1] = self.ncomp
+#         if self.parallel:
+#             self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
+#             compsperdev = self.ncomp / self.num_cores
+#             self.work_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
+#             self.result_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
+#             self.workers = [ CPUWorker(self.data, self.gamma, self.mu_prior_mean, 
+#                                        self._Phi0, self._nu0, self.work_queue[i], self.result_queue[i])
+#                              for i in xrange(self.num_cores) ]
+#             self.compsdevmap = {}; cumcomps = 0
+#             for i in xrange(self.num_cores):
+#                 self.compsdevmap[i] = [int(cumcomps), int(min(cumcomps+compsperdev, self.ncomp))]
+#                 cumcomps += compsperdev
+#             self.compsdevmap[self.num_cores-1][1] = self.ncomp
 
         
     def _set_initial_values(self, alpha0, nu0, Phi0, mu0, Sigma0, weights0,
@@ -210,9 +212,9 @@ class DPNormalMixture(object):
         self._setup_storage(niter)
 
         # start threads
-        if self.parallel:
-            for w in self.workers:
-                w.start()
+#         if self.parallel:
+#             for w in self.workers:
+#                 w.start()
 
         if self.gpu:
             self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)
@@ -270,9 +272,9 @@ class DPNormalMixture(object):
                 self.Sigma[i] = Sigma
 
         # clean up threads
-        if self.parallel:
-            for i in xrange(self.num_cores):
-                self.work_queue[i].put(None)
+#         if self.parallel:
+#             for i in xrange(self.num_cores):
+#                 self.work_queue[i].put(None)
         if self.gpu:
             kill_GPUWorkers(self.gpu_workers)
 
@@ -324,96 +326,31 @@ class DPNormalMixture(object):
     def _update_mu_Sigma(self, mu, Sigma, labels, other_dat=None):
         is_hdp = isinstance(labels, list)
 
-        mu_output = np.zeros((self.ncomp, self.ndim)) ## comment out
-        Sigma_output = np.zeros((self.ncomp, self.ndim, self.ndim)) ## comment out
-        if is_hdp:
-            ct = np.zeros((len(labels), self.ncomp), dtype=np.int)
-        else:
-            ct = np.zeros(self.ncomp, dtype=np.int)
-
         if other_dat is None:
             data = self.data
         else:
             data = other_dat
 
-        if self.parallel:
-            num_jobs = len(self.compsdevmap)
-            for tid in self.compsdevmap:
-                rng = self.compsdevmap[tid]
-                self.work_queue[tid].put(CompUpdate(np.arange(rng[0], rng[1]), labels, Sigma[rng[0]:rng[1]]))
+        if is_hdp:
+            all_labels = np.empty(self.cumobs[-1], dtype=np.int)
+            i = 0
+            for labs in labels:
+                all_labels[self.cumobs[i]:self.cumobs[i+1]] = labs.copy()
+                i += 1
+            if len(mu.shape) == 1:
+                import pdb; pdb.set_trace()
 
-            #while num_jobs:
-            for tid in self.compsdevmap:
-                result = self.result_queue[tid].get()
-                newcomps = result.comps
-                rng = (newcomps[0], newcomps[-1]+1)
-                mu_output[rng[0]:rng[1]] = result.new_mu
-                Sigma_output[rng[0]:rng[1]] = result.new_Sigma
-                if is_hdp:
-                    ct[:,rng[0]:rng[1]] = result.count
-                else:
-                    ct[rng[0]:rng[1]] = result.count
-                num_jobs -= 1            
-
+            ct = sampler.sample_mu_Sigma(mu, Sigma, all_labels, data,
+                                         self.gamma[0], self.mu_prior_mean,
+                                         self._nu0, self._Phi0[0], self.parallel,
+                                         self.cumobs[1:])
+            
         else:
-#             t1 = time.time()
-#             for j in xrange(self.ncomp):
-#                 if is_hdp:
-#                     nobs = data.shape[0]
-#                     mask = np.zeros(nobs, dtype=np.bool)
-#                     count = np.zeros(len(labels), dtype=np.int)
-#                     cumobs = 0; ii = 0
-#                     for labs in labels:
-#                         submask = labs == j
-#                         mask[cumobs:(cumobs+len(labs))] = submask
-#                         count[ii] = np.sum(submask); 
-#                         cumobs+=len(labs); ii+=1
-#                 else:
-#                     mask = labels == j
-#                     count = np.sum(mask)
-
-
-#                 Xj = data[mask]
-#                 nj = len(Xj)
-                
-#                 sumxj = Xj.sum(0)
-
-#                 gam = self.gamma[j]
-#                 mu_hyper = self.mu_prior_mean
-
-#                 post_mean = (mu_hyper / gam + sumxj) / (1 / gam + nj)
-#                 post_cov = 1 / (1 / gam + nj) * Sigma[j]
-
-#                 new_mu = npr.multivariate_normal(post_mean, post_cov)
-                
-#                 Xj_demeaned = Xj - new_mu
-
-#                 mu_SS = np.outer(new_mu - mu_hyper, new_mu - mu_hyper) / gam
-#                 data_SS = np.dot(Xj_demeaned.T, Xj_demeaned)
-#                 post_Phi = data_SS + mu_SS + self._Phi0[j]
-
-#                 # symmetrize
-#                 post_Phi = (post_Phi + post_Phi.T) / 2
-                
-#                 # P(Sigma) ~ IW(nu + 2, nu * Phi)
-#                 # P(Sigma | theta, Y) ~
-#                 post_nu = nj + self.ndim + self._nu0 + 2
-
-#                 new_Sigma = invwishartrand_prec(post_nu, post_Phi)
-
-#                 mu_output[j] = new_mu
-#                 Sigma_output[j] = new_Sigma
-#                 if is_hdp:
-#                     ct[:, j] = count
-#                 else:
-#                     ct[j] = count
-#             print "old time " + str(time.time() - t1)
-            #t2 = time.time()
             ct = sampler.sample_mu_Sigma(mu, Sigma, labels, data,
-                                    self.gamma[0], self.mu_prior_mean,
-                                    self._nu0, self._Phi0[0])
+                                         self.gamma[0], self.mu_prior_mean,
+                                         self._nu0, self._Phi0[0], self.parallel)
             #print "my time " + str(time.time() - t2)
-            return ct
+        return ct
 
 
 
