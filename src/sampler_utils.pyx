@@ -6,7 +6,7 @@ from cython.parallel import prange
 import multiprocessing
 
 from libc.stdlib cimport calloc, malloc, free
-from libc.math cimport sqrt, lgamma, log
+from libc.math cimport sqrt, lgamma, log, fabs
 
 
 include "cyarma.pyx"
@@ -291,30 +291,113 @@ def sample_mu_Sigma(np.ndarray[np.double_t, ndim=2] mu_in,
 
 ############### HDP Samplers ######################
 
-cdef inline double log_beta_pdf(double x, double a, double b):
-    return lgamma(a+b) - lgamma(a) - lgamma(b) + (a-1)*log(x) + (b-1)*log(x-1)
+cdef inline double log_beta_pdf(double x, double a, double b) nogil:
+    return lgamma(a+b) - lgamma(a) - lgamma(b) + (a-1)*log(x) + (b-1)*log(1-x)
 
-cdef double beta_post(np.ndarray[np.double_t, ndim=1] & stick_beta,
-                      np.ndarray[np.double_t, ndim=1] & beta,
-                      np.ndarray[np.double_t, ndim=2] & stick_weights,
-                      double & alpha0, double & alpha):
+cdef inline double log_gamma_pdf(double x, double alpha, double beta) nogil:
+    return alpha*log(beta) - lgamma(alpha) + (alpha-1)*log(x) - beta*x
+
+@cython.boundscheck(False)
+@cython.cdivision(True)
+cdef double beta_post(np.ndarray[np.double_t, ndim=1] stick_beta,
+                      np.ndarray[np.double_t, ndim=1] beta,
+                      np.ndarray[np.double_t, ndim=2] stick_weights,
+                      double  alpha0, double  alpha):
     cdef int j
     cdef double a, b
     cdef int J = stick_weights.shape[0]
-    cdef int k = stick_weights.shape[1]
+    cdef int k = beta.shape[0]
     cdef double lpost = 0.0
     cdef double cumsum = 0.0
 
-    for j in range(J-1):
-        cumsum += beta[j]
-        a = alpha0*beta[j]
+    for k in range(k-1):
+        cumsum += beta[k]
+        a = alpha0*beta[k]
         b = alpha0*(1-cumsum)
-        for i in range(k-1):
-            lpost += log_beta_pdf(sitck_weights[j,i], a, b)
-        lpost += log_beta_pdf(stick_beta[j], 1.0, alpha)
+        for j in range(J-1):
+            lpost += log_beta_pdf(stick_weights[j,k], a, b)
+        lpost += log_beta_pdf(stick_beta[k], 1.0, alpha)
         
-    return lpost 
-               
+    return lpost
+
+@cython.boundscheck(False)
+@cython.cdivision(True)
+cdef np.ndarray[np.double_t] break_sticks(np.ndarray[np.double_t, ndim=1]  V):
+    cdef int n = V.shape[0]
+    cdef int k 
+    cdef np.ndarray[np.double_t] pi = np.zeros(n+1, dtype=np.double)
+    pi[0] = V[0]
+    cdef double prod = (1-V[0])
+    for k in range(1, n):
+        pi[k] = prod * V[k]
+        prod *= 1 - V[k]
+    pi[-1] = prod
+    return pi
+
+@cython.boundscheck(False)
+@cython.cdivision(True)
+def sample_beta(np.ndarray[np.double_t, ndim=1] stick_beta,
+                np.ndarray[np.double_t, ndim=1] beta,
+                np.ndarray[np.double_t, ndim=2] stick_weights,
+                double alpha0, double alpha,
+                np.ndarray[np.double_t, ndim=1] AR,
+                np.ndarray[np.double_t, ndim=1] prop_scale):
+
+
+    cdef rng_sampler[double] * R = new rng_sampler[double]()
+    cdef np.ndarray[np.double_t] old_stick_beta = stick_beta.copy()
+    cdef np.ndarray[np.double_t] old_beta = beta.copy()
+    cdef int ncomp = beta.shape[0]
+    # get initial logpost
+    cdef double lpost = beta_post(stick_beta, beta, stick_weights, alpha0, alpha)
+    cdef double lpost_new, prop
+    for k in range(ncomp-1):
+        
+        # sample new beta from reflected normal
+        #prop = stats.norm.rvs(stick_beta[k], self.prop_scale[k])
+        prop = R.normal(stick_beta[k], prop_scale[k])
+        while prop > (1-1e-9) or prop < 1e-9:
+            if prop > 1-1e-9:
+                prop = 2*(1-1e-9) - prop
+            else:
+                prop = 2*1e-9 - prop
+        stick_beta[k] = prop
+        beta = break_sticks(stick_beta)
+
+        # get new posterior
+        lpost_new = beta_post(stick_beta, beta, stick_weights, alpha0, alpha)
+
+        # accept or reject
+        if R.exp(1.0) > lpost - lpost_new:
+            #accept
+            AR[k] += 1
+            lpost = lpost_new
+        else:
+            stick_beta[k] = old_stick_beta[k]
+            beta = break_sticks(stick_beta)
+    return stick_beta, beta
+
+@cython.boundscheck(False)
+@cython.cdivision(True)
+def sample_alpha0(np.ndarray[np.double_t, ndim=2] stick_weights,
+                  np.ndarray[np.double_t, ndim=1] beta, double alpha0,
+                  double e0, double f0,
+                  np.ndarray[np.double_t, ndim=1] prop_scale,
+                  np.ndarray[np.double_t, ndim=1] AR):
+    # just reuse with dummy vars for beta things
+    cdef rng_sampler[double] * R = new rng_sampler[double]()
+    cdef double lpost = beta_post(0.5*np.ones_like(beta), beta, stick_weights, alpha0, 1)
+    lpost += log_gamma_pdf(alpha0, e0, f0)
+    cdef double alpha0_old = alpha0
+    alpha0 = fabs(R.normal(alpha0, prop_scale[-1]))
+    cdef double lpost_new = beta_post(0.5*np.ones_like(beta), beta, stick_weights, alpha0, 1)
+    lpost_new += log_gamma_pdf(alpha0, e0, f0)
+    #accept or reject
+    if R.exp(1) > lpost - lpost_new:
+        AR[-1] += 1
+    else:
+        alpha0 = alpha0_old
+    return alpha0
 
 # ############ some python functions for testing ############
 

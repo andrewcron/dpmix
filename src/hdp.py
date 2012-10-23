@@ -10,6 +10,8 @@ from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_p
 from utils import break_sticks
 from dpmix import DPNormalMixture
 
+import sampler
+
 try:
     from munkres import munkres, _get_cost
 except ImportError:
@@ -29,7 +31,7 @@ except ImportError:
 
 #from multicpu import CPUWorker
 
-# func to get lpost for beta
+#func to get lpost for beta
 def beta_post(stick_beta, beta, stick_weights, alpha0, alpha):
     J = stick_weights.shape[0]
     k = stick_weights.shape[1]
@@ -240,11 +242,16 @@ class HDPNormalMixture(DPNormalMixture):
 
             ## update weights, masks
             stick_weights, weights = self._update_stick_weights(counts, beta, alpha0)
-            stick_beta, beta = self._update_beta(stick_beta, beta, stick_weights, alpha0, alpha)
+            #stick_beta, beta = self._update_beta(stick_beta, beta, stick_weights, alpha0, alpha)
+            stick_beta, beta = sampler.sample_beta(stick_beta, beta, stick_weights, alpha0,
+                                                   alpha, self.AR, self.prop_scale)
             ## hyper parameters
             alpha = self._update_alpha(stick_beta)
-            alpha0 = self._update_alpha0(stick_weights, beta, alpha0)
-
+            #alpha0 = self._update_alpha0(stick_weights, beta, alpha0)
+            alpha0 = sampler.sample_alpha0(stick_weights, beta, alpha0,
+                                           self.e0, self.f0,
+                                           self.prop_scale, self.AR)
+            #import pdb; pdb.set_trace()
 
             ## Relabel
             if i>0 and ident:
@@ -313,7 +320,8 @@ class HDPNormalMixture(DPNormalMixture):
             new_stick_weights[j] = sticksj
         return new_stick_weights ,new_weights
 
-    def _update_beta(self, stick_beta, beta, stick_weights, alpha0, alpha):                
+    def _update_beta(self, stick_beta, beta, stick_weights, alpha0, alpha):
+
         old_stick_beta = stick_beta.copy()
         old_beta = beta.copy()
         for k in xrange(self.ncomp-1):
@@ -341,21 +349,21 @@ class HDPNormalMixture(DPNormalMixture):
                 stick_beta[k] = old_stick_beta[k]
                 beta = break_sticks(stick_beta)
         return stick_beta, beta
-        
-    def _update_alpha0(self, stick_weights, beta, alpha0):
+#        
+#    def _update_alpha0(self, stick_weights, beta, alpha0):
         # just reuse with dummy vars for beta things
-        lpost = beta_post(0.5*np.ones_like(beta), beta, stick_weights, float(alpha0), float(1))
-        lpost += stats.gamma.logpdf(alpha0, self.e0, loc=0, scale=1.0/self.f0)
-        alpha0_old = alpha0
-        alpha0 = np.abs(stats.norm.rvs(alpha0, self.prop_scale[-1]))
-        lpost_new = beta_post(0.5*np.ones_like(beta), beta, stick_weights, float(alpha0), float(1))
-        lpost_new += stats.gamma.logpdf(alpha0, self.e0, loc=0, scale=1.0/self.f0)
-        #accept or reject
-        if stats.expon.rvs() > lpost - lpost_new:
-            self.AR[-1] += 1
-        else:
-            alpha0 = alpha0_old
-        return alpha0
+#         lpost = beta_post(0.5*np.ones_like(beta), beta, stick_weights, float(alpha0), float(1))
+#         lpost += stats.gamma.logpdf(alpha0, self.e0, loc=0, scale=1.0/self.f0)
+#         alpha0_old = alpha0
+#         alpha0 = np.abs(stats.norm.rvs(alpha0, self.prop_scale[-1]))
+#         lpost_new = beta_post(0.5*np.ones_like(beta), beta, stick_weights, float(alpha0), float(1))
+#         lpost_new += stats.gamma.logpdf(alpha0, self.e0, loc=0, scale=1.0/self.f0)
+#         #accept or reject
+#         if stats.expon.rvs() > lpost - lpost_new:
+#             self.AR[-1] += 1
+#         else:
+#             alpha0 = alpha0_old
+#         return alpha0
         
 
     def _tune(self):

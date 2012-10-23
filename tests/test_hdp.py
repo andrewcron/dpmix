@@ -33,7 +33,8 @@ if __name__ == '__main__':
 
     #mcmc = HDPNormalMixture(data, ncomp=3, gpu=[0,1,2], parallel=True, verbose=100)
     mcmc = HDPNormalMixture(data, ncomp=3, parallel=True, verbose=100)
-    mcmc.sample(100, nburn=5, tune_interval=100)
+    mcmc.sample(100, nburn=1000, tune_interval=100)
+#    import pdb; pdb.set_trace()
     imcmc = HDPNormalMixture(mcmc, verbose=100)
     imcmc.sample(100, nburn=0, ident=True)
     print imcmc.mu[-1]
