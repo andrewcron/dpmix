@@ -35,6 +35,7 @@ _logmnflt = np.log(1e-37)
 iexp = ElementwiseKernel("float *z", "z[i] = (z[i] < -40.0) ? 0.0 : expf(z[i]);", "inplexp")
 ### Code needs to be moved out of tasks ... pretty sure ...
 while True:
+    #print 'started'
     # get task ... manual wait to decrease CPU impact 2% load
     while True:
         if comm.Iprobe(source=0, tag=11):
@@ -44,6 +45,7 @@ while True:
     task = np.array(0, dtype='i')
     comm.Recv([task, MPI.INT], source=0, tag=11) # -1 -- kill, 0 -- init
     #print 'got task'
+
     #print task
 
     # process task or pill
@@ -86,27 +88,55 @@ while True:
         # get number of subtasks
         subtasknum = np.array(0, dtype='i')
         comm.Recv([subtasknum, MPI.INT], source=0, tag=12)
+        # put tasks and params in lists
+        a_params = []; a_w = []; a_mu = []; a_Sigma = []
+        for it in range(subtasknum):
+            #params
+            params = np.empty(4, dtype='i')
+            comm.Recv([params, MPI.INT], source=0, tag=13)            
+            dataind, ncomp, ttype, gid = params
+            nobs, ndim = alldata[dataind].shape
+            a_params.append(params)
+            # weights
+            w = np.empty(ncomp, dtype='d')
+            comm.Recv([w, MPI.DOUBLE], source=0, tag=21)
+            a_w.append(w)
+            # mu
+            mu = np.empty(ncomp*ndim, dtype='d')
+            comm.Recv([mu, MPI.DOUBLE], source=0, tag=22); 
+            mu = mu.reshape(ncomp, ndim)
+            a_mu.append(mu)
+            #Sigma
+            Sigma = np.empty(ncomp*ndim*ndim, dtype='d')
+            comm.Recv([Sigma, MPI.DOUBLE], source=0, tag=23); 
+            Sigma = Sigma.reshape(ncomp, ndim, ndim)
+            a_Sigma.append(Sigma)
 
         #for subtask in task:
         for it in range(subtasknum):
             # get task parameters
-            params = np.empty(4, dtype='i')
-            comm.Recv([params, MPI.INT], source=0, tag=13)
+            #params = np.empty(4, dtype='i')
+            #comm.Recv([params, MPI.INT], source=0, tag=13)
+            #dataind, ncomp, ttype, gid = params
+            params = a_params[it]
             dataind, ncomp, ttype, gid = params
             nobs, ndim = alldata[dataind].shape
             
             ## get other inputs via ctype streams! 
             # w
-            w = np.empty(ncomp, dtype='d')
-            comm.Recv([w, MPI.DOUBLE], source=0, tag=21)
+            #w = np.empty(ncomp, dtype='d')
+            #comm.Recv([w, MPI.DOUBLE], source=0, tag=21)
+            w = a_w[it]
             # mu
-            mu = np.empty(ncomp*ndim, dtype='d')
-            comm.Recv([mu, MPI.DOUBLE], source=0, tag=22); 
-            mu = mu.reshape(ncomp, ndim)
+            #mu = np.empty(ncomp*ndim, dtype='d')
+            #comm.Recv([mu, MPI.DOUBLE], source=0, tag=22); 
+            #mu = mu.reshape(ncomp, ndim)
+            mu = a_mu[it]
             # Sigma
-            Sigma = np.empty(ncomp*ndim*ndim, dtype='d')
-            comm.Recv([Sigma, MPI.DOUBLE], source=0, tag=23); 
-            Sigma = Sigma.reshape(ncomp, ndim, ndim)
+            #Sigma = np.empty(ncomp*ndim*ndim, dtype='d')
+            #comm.Recv([Sigma, MPI.DOUBLE], source=0, tag=23); 
+            #Sigma = Sigma.reshape(ncomp, ndim, ndim)
+            Sigma = a_Sigma[it]
             
             if ttype>0: # 1 -- just densities ... 2 -- relabel too
                 ## do GPU work ... 
@@ -168,10 +198,10 @@ while True:
 
                 ## Free Everything
                 densities.gpudata.free()
-                
+        
         # send results summary
         numres = np.array(len(results), dtype='i')
-        comm.Send(numres, dest=0, tag=13)
+        comm.Isend(numres, dest=0, tag=13)
         # send details
         for subresult in results:
             tag = 21

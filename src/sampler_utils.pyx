@@ -25,6 +25,7 @@ cdef extern from "<vector>" namespace "std" nogil:
         T& at(int) nogil
         iterator begin() nogil
         iterator end() nogil
+        void erase(iterator) nogil
 
 @cython.boundscheck(False)
 cdef mat wishartrand(double nu, mat phi, rng_sampler[double] & rng) nogil:
@@ -47,6 +48,7 @@ cdef mat wishartrand(double nu, mat phi, rng_sampler[double] & rng) nogil:
     cdef mat tmp =  deref(mfoo) * phi_chol
 
     free(foo)
+    del mfoo
     return tmp.t() * tmp
 
 cdef mat invwishartrand(double nu, mat & phi, rng_sampler[double] & rng)  nogil:
@@ -74,6 +76,7 @@ cdef vec mvnormrand_eigs(vec & mu, vec & evals, mat & evecs, rng_sampler[double]
     samp = samp % evals
     samp = evecs * samp
     samp = samp + mu
+    del samp_pt
     return samp
 
 cdef vec mvnormrand(vec & mu, mat & Sigma, rng_sampler[double] & rng)  nogil:
@@ -83,7 +86,10 @@ cdef vec mvnormrand(vec & mu, mat & Sigma, rng_sampler[double] & rng)  nogil:
     cdef mat * evecs_pt = new mat(dim, dim)
     cdef mat evecs = deref(evecs_pt)
     eig_sym(evals, evecs, Sigma)
-    return mvnormrand_eigs(mu, evals, evecs, rng)
+    cdef vec result = mvnormrand_eigs(mu, evals, evecs, rng)
+    del evals_pt
+    del evecs_pt
+    return result
 
 @cython.boundscheck(False)
 @cython.cdivision(True)
@@ -97,7 +103,10 @@ cdef vec mvnormrand_prec(vec & mu, mat & Tau, rng_sampler[double] & rng)  nogil:
     eig_sym(evals, evecs, Tau)
     for i in range(dim):
         evals[i] = 1/evals[i]
-    return mvnormrand_eigs(mu, evals, evecs, rng)
+    cdef vec result = mvnormrand_eigs(mu, evals, evecs, rng)
+    del evals_pt
+    del evecs_pt
+    return result
 
 @cython.boundscheck(False)
 @cython.cdivision(True)
@@ -176,6 +185,14 @@ cdef void _sample_component(vec & mu, mat & Sigma,
     ## copy sample mu over currect mu
     for j in range(p):
         mu[j] = new_mu[j]
+
+    del sumxj_p
+    del SS_p
+    del new_Sigma_pt
+    del evals_pt
+    del evecs_pt
+    
+
     
 @cython.boundscheck(False)
 @cython.cdivision(True)
@@ -240,6 +257,12 @@ cdef vec __sample_mu_Sigma(mat * mu, cube * Sigma, vec * labels, mat * data,
                           deref(data), deref(count)[k], deref(mask).at(k),
                           gamma, deref(pr_mu),
                           pr_nu, deref(pr_phi), deref(R))
+
+    for k in range(ncomp):
+        mask.erase(mask.begin())
+    del mask
+    del R
+
     if is_hdp:
         return deref(hdp_count)
     else:
@@ -273,7 +296,8 @@ def sample_mu_Sigma(np.ndarray[np.double_t, ndim=2] mu_in,
     ## convert to armadillo
     cdef mat * mu = numpy_to_mat(mu_in.T)
     cdef cube * Sigma = numpy_to_cube(Sigma_in)
-    cdef vec * labels = numpy_to_vec(np.array(labels_in, dtype=np.double))
+    cdef np.ndarray[np.double_t] labels_in_dbl = np.array(labels_in, dtype=np.double)
+    cdef vec * labels = numpy_to_vec(labels_in_dbl)
     cdef mat * data = numpy_to_mat(data_in.T)
     cdef vec * pr_mu = numpy_to_vec(pr_mu_in)
     cdef mat * pr_phi = numpy_to_mat(pr_phi_in.T)
@@ -375,6 +399,7 @@ def sample_beta(np.ndarray[np.double_t, ndim=1] stick_beta,
         else:
             stick_beta[k] = old_stick_beta[k]
             beta = break_sticks(stick_beta)
+    del R
     return stick_beta, beta
 
 @cython.boundscheck(False)
@@ -397,6 +422,7 @@ def sample_alpha0(np.ndarray[np.double_t, ndim=2] stick_weights,
         AR[-1] += 1
     else:
         alpha0 = alpha0_old
+    del R
     return alpha0
 
 # ############ some python functions for testing ############
@@ -405,12 +431,14 @@ def pyiwishartrand(double nu, np.ndarray[np.double_t, ndim=2] Phi):
     #cdef rng r
     cdef rng_sampler[double] * R = new rng_sampler[double]()
     cdef mat result = invwishartrand(nu, deref(numpy_to_mat(Phi)), deref(R))
+    del R
     return mat_to_numpy(result, None)
 
 def pyiwishartrand_prec(double nu, np.ndarray[np.double_t, ndim=2] Phi):
     #cdef rng r
     cdef rng_sampler[double] * R = new rng_sampler[double]()
     cdef mat result = invwishartrand_prec(nu, deref(numpy_to_mat(Phi)), deref(R))
+    del R
     return mat_to_numpy(result, None)
 
 def pymvnorm(np.ndarray[np.double_t, ndim=1] mu,
@@ -418,13 +446,16 @@ def pymvnorm(np.ndarray[np.double_t, ndim=1] mu,
 
     cdef rng_sampler[double] * R = new rng_sampler[double]()
     cdef vec result = mvnormrand(deref(numpy_to_vec(mu)), deref(numpy_to_mat(Sigma)), deref(R))
+    del R
     return vec_to_numpy(result, None)
 
 def pymvnorm_prec(np.ndarray[np.double_t, ndim=1] mu,
               np.ndarray[np.double_t, ndim=2] Sigma):
 
     cdef rng_sampler[double] * R = new rng_sampler[double]()
-    cdef vec result = mvnormrand_prec(deref(numpy_to_vec(mu)), deref(numpy_to_mat(Sigma)), deref(R))
+    cdef vec result = mvnormrand_prec(deref(numpy_to_vec(mu)),
+                                      deref(numpy_to_mat(Sigma)), deref(R))
+    del R
     return vec_to_numpy(result, None)
 
 

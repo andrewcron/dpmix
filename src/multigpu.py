@@ -54,14 +54,12 @@ def init_GPUWorkers(data, devslist=None):
             workers.Isend([task, MPI.INT], dest=thd, tag=11)
             params = np.array([todat.shape[0], todat.shape[1], dev], dtype='i')
             workers.Send([params, MPI.INT], dest=thd, tag=12)
-            #task = Init_Task(todat.shape[0], todat.shape[1], dev)
-            #workers.isend(task, dest=thd, tag=11)
             workers.Send([todat, MPI.DOUBLE], dest=thd, tag=13)
             dind = np.array(0, dtype='i')
             workers.Recv([dind, MPI.INT], source=thd, tag=14)
             _dataind[i] = dind
             _datadevmap[i] = thd
-    #print 'initialized!'
+
     return workers
 
 def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
@@ -81,13 +79,14 @@ def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
 
     for i in xrange(ndev):
         # send the number of tasks
+        #print 'dev ' + str(ndev)
         tsk = np.array(1, dtype='i'); 
         workers.Isend([tsk, MPI.INT], dest=i, tag=11)
         numtasks = np.array(len(tasks[i]), dtype='i')
         workers.Send([numtasks,MPI.INT], dest=i, tag=12)
 
         for tsk in tasks[i]:
-            
+            #print 'tsk ' + str(tsk)
             params = np.array([tsk.dataind, tsk.ncomp, int(tsk.relabel)+1, tsk.gid], dtype='i')
             workers.Send([params, MPI.INT], dest=i, tag=13)
 
@@ -95,21 +94,28 @@ def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
             workers.Send([np.asarray(mu, dtype='d'), MPI.DOUBLE], dest=i, tag=22)
             workers.Send([np.asarray(Sigma, dtype='d'), MPI.DOUBLE], dest=i, tag=23)
 
-    for i in xrange(ndev):
-        numres = np.array(0, dtype='i'); workers.Recv([numres,MPI.INT], source=i, tag=13)
-        #print numres
-        #results = workers.recv(source=i, tag=13)
-        for it in range(numres):
-            rnobs = np.array(0, dtype='i'); workers.Recv([rnobs,MPI.INT], source=i, tag=21)
-            labs = np.empty(rnobs, dtype='i')
-            workers.Recv([labs, MPI.INT], source=i, tag=22)
-            rgid = np.array(0, dtype='i'); workers.Recv([rgid,MPI.INT], source=i, tag=23)
-            labels[rgid] = labs
-            if relabel:
-                cZ = np.empty(rnobs, dtype='i')
-                workers.Recv([cZ, MPI.INT], source=i, tag=24)
-                Z[rgid] = cZ
+    # wait for results from any device in any order ... 
+    res_devs = [_i for _i in range(ndev)]
+    while len(res_devs)>0:
+        for i in res_devs:
+            if workers.Iprobe(source=i, tag=13):
+                numres = np.array(0, dtype='i');
+                workers.Recv([numres,MPI.INT], source=i, tag=13)
 
+                for it in range(numres):
+                    rnobs = np.array(0, dtype='i');
+                    workers.Recv([rnobs,MPI.INT], source=i, tag=21)
+                    labs = np.empty(rnobs, dtype='i')
+                    workers.Recv([labs, MPI.INT], source=i, tag=22)
+                    rgid = np.array(0, dtype='i');
+                    workers.Recv([rgid,MPI.INT], source=i, tag=23)
+                    labels[rgid] = labs
+                    if relabel:
+                        cZ = np.empty(rnobs, dtype='i')
+                        workers.Recv([cZ, MPI.INT], source=i, tag=24)
+                        Z[rgid] = cZ
+                res_devs.remove(i)
+            
 
     return labels, Z 
 
@@ -124,31 +130,35 @@ def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
         task = np.array(1, dtype='i')
         workers.Isend([task,MPI.INT], dest=i, tag=11)
         numtasks = np.array(1, dtype='i')
-        workers.Send([numtasks,MPI.INT], dest=i, tag=12)
+        workers.Isend([numtasks,MPI.INT], dest=i, tag=12)
         params = np.array([0, len(w), int(relabel)+1, 1], dtype='i')
-        workers.Send([params,MPI.INT], dest=i, tag=13)
+        workers.Isend([params,MPI.INT], dest=i, tag=13)
 
         # give bigger params
-        workers.Send([np.asarray(w,dtype='d'), MPI.DOUBLE], dest=i, tag=21)
-        workers.Send([np.asarray(mu,dtype='d'), MPI.DOUBLE], dest=i, tag=22)
-        workers.Send([np.asarray(Sigma,dtype='d'), MPI.DOUBLE], dest=i, tag=23)
+        workers.Isend([np.asarray(w,dtype='d'), MPI.DOUBLE], dest=i, tag=21)
+        workers.Isend([np.asarray(mu,dtype='d'), MPI.DOUBLE], dest=i, tag=22)
+        workers.Isend([np.asarray(Sigma,dtype='d'), MPI.DOUBLE], dest=i, tag=23)
     #gather the results
 
     labs=[]; Zs=[];
-    for i in xrange(ndev):
-        numres = np.array(0, dtype='i'); workers.Recv(numres, source=i, tag=13)
-        rnobs = np.array(0, dtype='i'); workers.Recv(rnobs, source=i, tag=21)
+    res_devs = [_i for _i in range(ndev)]
+    while len(res_devs)>0:
+        if workers.Iprobe(source=i, tag=13):
+            for i in res_devs:
+                numres = np.array(0, dtype='i'); workers.Recv(numres, source=i, tag=13)
+                rnobs = np.array(0, dtype='i'); workers.Recv(rnobs, source=i, tag=21)
 
-        nobs += rnobs
-        partitions.append(nobs)
-        lab = np.empty(rnobs, dtype='i')
-        workers.Recv([lab, MPI.INT], source=i, tag=22)
-        labs.append(lab)
-        gid = np.array(0, dtype='i'); workers.Recv([gid, MPI.INT], tag=23)
-        if relabel:
-            Z = np.empty(rnobs, dtype='i')
-            workers.Recv([Z, MPI.INT], source=i, tag=24)
-            Zs.append(Z)
+                nobs += rnobs
+                partitions.append(nobs)
+                lab = np.empty(rnobs, dtype='i')
+                workers.Recv([lab, MPI.INT], source=i, tag=22)
+                labs.append(lab)
+                gid = np.array(0, dtype='i'); workers.Recv([gid, MPI.INT], tag=23)
+                if relabel:
+                    Z = np.empty(rnobs, dtype='i')
+                    workers.Recv([Z, MPI.INT], source=i, tag=24)
+                    Zs.append(Z)
+            res_devs.remove(i)
 
 
     res = np.zeros(nobs, dtype='i')
