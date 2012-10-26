@@ -346,7 +346,7 @@ class DPNormalMixture(object):
                                          self.cumobs[1:])
             
         else:
-            ct = sampler.sample_mu_Sigma(mu, Sigma, labels, data,
+            ct = sampler.sample_mu_Sigma(mu, Sigma, np.asarray(labels, dtype=np.int), data,
                                          self.gamma[0], self.mu_prior_mean,
                                          self._nu0, self._Phi0[0], self.parallel)
             #print "my time " + str(time.time() - t2)

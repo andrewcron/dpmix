@@ -206,11 +206,11 @@ while True:
         for subresult in results:
             tag = 21
             for res in subresult:
-                ##print 'sending results tag ' + str(tag)
                 if np.issubdtype(res.dtype, 'float'):
                     comm.Send([res, MPI.DOUBLE], dest=0, tag=tag)
                 else:
                     comm.Send([res, MPI.INT], dest=0, tag=tag)
+                #print 'sent results tag ' + str(tag) + ' from ' + str(comm.Get_rank())
                 tag += 1
 
 ## the end 

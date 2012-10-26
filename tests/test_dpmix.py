@@ -42,7 +42,7 @@ if __name__ == '__main__':
     if type(options.gpu) is bool:
         use_gpu = options.gpu
     elif options.gpu == 'ALL':
-        use_gpu = [0,1,2,3]
+        use_gpu = [0,1,2]
     else:
         use_gpu = int(options.gpu)
     verbosity = int(options.verbose)
@@ -52,15 +52,15 @@ if __name__ == '__main__':
     ncomps = 3 # n mixture components
     npr.seed(datetime.now().microsecond)
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
-    #data = data - data.mean(0)
-    #data = data/data.std(0)
+    data = data - data.mean(0)
+    data = data/data.std(0)
 
     #import pdb
     #pdb.set_trace()
     print "use_gpu=" + str(use_gpu)
     mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
-    mcmc.sample(10,nburn=0)
+    mcmc.sample(100,nburn=0)
     print mcmc.mu[-1]
     print mcmc.Sigma[-1]
 
@@ -69,7 +69,7 @@ if __name__ == '__main__':
     print bem.mu
     
     ident_mcmc = DPNormalMixture(bem, verbose=verbosity)
-    ident_mcmc.sample(100, nburn=0, ident=True)
+    ident_mcmc.sample(100, nburn=0, ident=False)
     print ident_mcmc.weights[-1]
     print ident_mcmc.mu[-1]
 

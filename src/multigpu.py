@@ -130,37 +130,42 @@ def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
         task = np.array(1, dtype='i')
         workers.Isend([task,MPI.INT], dest=i, tag=11)
         numtasks = np.array(1, dtype='i')
-        workers.Isend([numtasks,MPI.INT], dest=i, tag=12)
+        workers.Send([numtasks,MPI.INT], dest=i, tag=12)
         params = np.array([0, len(w), int(relabel)+1, 1], dtype='i')
-        workers.Isend([params,MPI.INT], dest=i, tag=13)
+        workers.Send([params,MPI.INT], dest=i, tag=13)
 
         # give bigger params
-        workers.Isend([np.asarray(w,dtype='d'), MPI.DOUBLE], dest=i, tag=21)
-        workers.Isend([np.asarray(mu,dtype='d'), MPI.DOUBLE], dest=i, tag=22)
-        workers.Isend([np.asarray(Sigma,dtype='d'), MPI.DOUBLE], dest=i, tag=23)
+        workers.Send([np.asarray(w,dtype='d'), MPI.DOUBLE], dest=i, tag=21)
+        workers.Send([np.asarray(mu,dtype='d'), MPI.DOUBLE], dest=i, tag=22)
+        workers.Send([np.asarray(Sigma,dtype='d'), MPI.DOUBLE], dest=i, tag=23)
     #gather the results
-
     labs=[]; Zs=[];
     res_devs = [_i for _i in range(ndev)]
+    partitions = np.empty(ndev, dtype=np.int)
+    labs = [None for _i in range(ndev)]
+    Zs = [None for _i in range(ndev)]
     while len(res_devs)>0:
-        if workers.Iprobe(source=i, tag=13):
-            for i in res_devs:
+        for i in res_devs:
+            if workers.Iprobe(source=i, tag=13):
                 numres = np.array(0, dtype='i'); workers.Recv(numres, source=i, tag=13)
                 rnobs = np.array(0, dtype='i'); workers.Recv(rnobs, source=i, tag=21)
-
                 nobs += rnobs
-                partitions.append(nobs)
+                partitions[i] = rnobs
                 lab = np.empty(rnobs, dtype='i')
                 workers.Recv([lab, MPI.INT], source=i, tag=22)
-                labs.append(lab)
-                gid = np.array(0, dtype='i'); workers.Recv([gid, MPI.INT], tag=23)
+                labs[i] = lab
+
+                gid = np.array(0, dtype='i');
+                workers.Recv([gid, MPI.INT], source=i, tag=23)
+
                 if relabel:
                     Z = np.empty(rnobs, dtype='i')
                     workers.Recv([Z, MPI.INT], source=i, tag=24)
-                    Zs.append(Z)
-            res_devs.remove(i)
+                    Zs[i] = Z
+                res_devs.remove(i)
 
-
+    partitions = np.r_[0,partitions.cumsum()]
+    #import pdb; pdb.set_trace()
     res = np.zeros(nobs, dtype='i')
     if relabel:
         Z = res.copy()
@@ -168,7 +173,10 @@ def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
         Z = None
 
     for i in xrange(ndev):
-        res[partitions[i]:partitions[i+1]] = labs[i]
+        try:
+            res[partitions[i]:partitions[i+1]] = labs[i]
+        except ValueError:
+            import pdb; pdb.set_trace()
         if relabel:
             Z[partitions[i]:partitions[i+1]] = Zs[i]
 
@@ -217,7 +225,7 @@ def get_expected_labels_GPU(workers, w, mu, Sigma):
         densities.append(dens.reshape(rnobs, ncomp))
         nll = np.array(0, dtype='d'); workers.Recv([nll, MPI.DOUBLE], source=i, tag=25)
         ll += nll
-        gid = np.array(0, dtype='i'); workers.Recv([gid, MPI.INT], tag=26)
+        gid = np.array(0, dtype='i'); workers.Recv([gid, MPI.INT], source=i, tag=26)
 
     dens = np.zeros((nobs, ncomp), dtype='d')
     xbar = np.zeros((ncomp, ndim), dtype='d')
