@@ -2,7 +2,7 @@ import numpy as np
 cimport numpy as np
 cimport cython
 cimport openmp
-from cython.parallel import prange
+from cython.parallel import prange, parallel, threadid
 import multiprocessing
 
 from libc.stdlib cimport calloc, malloc, free
@@ -11,6 +11,10 @@ from libc.math cimport sqrt, lgamma, log, fabs
 
 include "cyarma.pyx"
 include "random.pyx"
+
+# hack to get barrier (sync) for open mp
+cdef extern from *:
+    int OMP_BARRIER "#pragma omp barrier\n"
 
 cdef extern from "<vector>" namespace "std" nogil:
     cdef cppclass vector[T]:
@@ -198,7 +202,7 @@ cdef void _sample_component(vec & mu, mat & Sigma,
 @cython.cdivision(True)
 cdef vec __sample_mu_Sigma(mat * mu, cube * Sigma, vec * labels, mat * data,
                            double gamma, vec * pr_mu, double pr_nu, mat * pr_phi,
-                           vec * hdp_rngs, parallel=True, hdp=False):
+                           vec * hdp_rngs, do_parallel=True, hdp=False):
     cdef bool is_hdp
     cdef int k, nthd, chunk, i, J, cnt
     cdef rng_sampler[double] * R = new rng_sampler[double]()
@@ -234,7 +238,7 @@ cdef vec __sample_mu_Sigma(mat * mu, cube * Sigma, vec * labels, mat * data,
     cdef vec * cmu
     cdef mat * cSigma
 
-    if parallel:
+    if do_parallel:
         nthd = multiprocessing.cpu_count()
         chunk = 1
     else:
@@ -323,25 +327,37 @@ cdef inline double log_gamma_pdf(double x, double alpha, double beta) nogil:
 
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef double beta_post(np.ndarray[np.double_t, ndim=1] stick_beta,
-                      np.ndarray[np.double_t, ndim=1] beta,
-                      np.ndarray[np.double_t, ndim=2] stick_weights,
-                      double  alpha0, double  alpha):
-    cdef int j
+cdef double beta_post(double* stick_beta,
+                      double* beta,
+                      double* stick_weights,
+                      double  alpha0, double  alpha, int J, int K,
+                      int sw_str_r, int sw_str_c, int pos,
+                      double* likelihood, int nthreads) nogil:
     cdef double a, b
-    cdef int J = stick_weights.shape[0]
-    cdef int k = beta.shape[0]
-    cdef double lpost = 0.0
+    cdef int j, k
+#    cdef int J = stick_weights.shape[0]
+#    cdef int k = beta.shape[0] (or ncomp)
+    cdef double lpost
     cdef double cumsum = 0.0
-
-    for k in range(k-1):
+    cdef double * beta_cumsum = <double*>calloc(K, sizeof(double))
+    for k in range(K):
         cumsum += beta[k]
+        beta_cumsum[k] = cumsum
+
+    for k in prange(pos, K-1, schedule="static", num_threads=nthreads):
+        likelihood[k] = 0.0
+        #cumsum += beta[k]
         a = alpha0*beta[k]
-        b = alpha0*(1-cumsum)
+        b = alpha0*(1-beta_cumsum[k])
         for j in range(J-1):
-            lpost += log_beta_pdf(stick_weights[j,k], a, b)
-        lpost += log_beta_pdf(stick_beta[k], 1.0, alpha)
-        
+            likelihood[k] += log_beta_pdf(stick_weights[j*sw_str_r+k*sw_str_c], a, b)
+        likelihood[k] += log_beta_pdf(stick_beta[k], 1.0, alpha)
+
+    lpost = 0.0
+    for k in range(0,K-1):
+        lpost += likelihood[k]
+
+    free(beta_cumsum)
     return lpost
 
 @cython.boundscheck(False)
@@ -360,46 +376,94 @@ cdef np.ndarray[np.double_t] break_sticks(np.ndarray[np.double_t, ndim=1]  V):
 
 @cython.boundscheck(False)
 @cython.cdivision(True)
+cdef inline void update_beta(double * beta, double olen, double nlen, int pos, int k) nogil:
+    cdef int i
+    beta[pos] *= nlen / olen
+    if pos < k-1:
+        for i in range(pos+1,k):
+            beta[i] *= (1.0 - nlen) / (1.0 - olen)
+
+@cython.boundscheck(False)
+@cython.cdivision(True)
 def sample_beta(np.ndarray[np.double_t, ndim=1] stick_beta,
                 np.ndarray[np.double_t, ndim=1] beta,
                 np.ndarray[np.double_t, ndim=2] stick_weights,
                 double alpha0, double alpha,
                 np.ndarray[np.double_t, ndim=1] AR,
-                np.ndarray[np.double_t, ndim=1] prop_scale):
+                np.ndarray[np.double_t, ndim=1] prop_scale,
+                do_parallel = False):
 
 
     cdef rng_sampler[double] * R = new rng_sampler[double]()
     cdef np.ndarray[np.double_t] old_stick_beta = stick_beta.copy()
     cdef np.ndarray[np.double_t] old_beta = beta.copy()
+    # to make it GIL free, get pointers to all array data        
+    cdef double * old_stick_beta_ptr = &old_stick_beta[0]
+    cdef double * old_beta_ptr = &old_beta[0]
+    cdef double * beta_ptr = &beta[0]
+    cdef double * stick_beta_ptr = &stick_beta[0]
+    cdef double * stick_weights_ptr = &stick_weights[0,0]
+    cdef double * prop_scale_ptr = &prop_scale[0]
+    cdef double * AR_ptr = &AR[0]
+    # misc
     cdef int ncomp = beta.shape[0]
+    cdef int J = stick_weights.shape[0]
+    cdef int str_r = stick_weights.strides[0] / stick_weights.itemsize
+    cdef int str_c = stick_weights.strides[1] / stick_weights.itemsize
+    cdef double * lpost_new = <double*>calloc(1,sizeof(double))
+    cdef double * lpost = <double*>calloc(1,sizeof(double))
+    cdef double * prop = <double*>calloc(1,sizeof(double))
+    # likelihood working variable
+    cdef double * like_work = <double*>calloc(ncomp, sizeof(double))
+
     # get initial logpost
-    cdef double lpost = beta_post(stick_beta, beta, stick_weights, alpha0, alpha)
-    cdef double lpost_new, prop
-    for k in range(ncomp-1):
+    cdef int nthreads = 1
+    if do_parallel:
+        nthreads = multiprocessing.cpu_count()
+    openmp.omp_set_nested(1)
+    cdef int tid, k
+    with nogil, parallel(num_threads = 1):
+        tid = threadid()
+        lpost[0] = beta_post(stick_beta_ptr, beta_ptr,
+                          stick_weights_ptr, alpha0, alpha,
+                          J, ncomp, str_r, str_c, 0, like_work, nthreads)
+        for k in range(ncomp-1):
         
-        # sample new beta from reflected normal
-        #prop = stats.norm.rvs(stick_beta[k], self.prop_scale[k])
-        prop = R.normal(stick_beta[k], prop_scale[k])
-        while prop > (1-1e-9) or prop < 1e-9:
-            if prop > 1-1e-9:
-                prop = 2*(1-1e-9) - prop
-            else:
-                prop = 2*1e-9 - prop
-        stick_beta[k] = prop
-        beta = break_sticks(stick_beta)
+            # sample new beta from reflected normal
+            #prop = stats.norm.rvs(stick_beta[k], self.prop_scale[k])
+            if tid == 0:
+                prop[0] = R.normal(stick_beta_ptr[k], prop_scale_ptr[k])
+                while prop[0] > (1-1e-9) or prop[0] < 1e-9:
+                    if prop[0] > 1-1e-9:
+                        prop[0] = 2*(1-1e-9) - prop[0]
+                    else:
+                        prop[0] = 2*1e-9 - prop[0]
+                update_beta(beta_ptr, stick_beta_ptr[k], prop[0], k, ncomp) #beta = break_sticks(stick_beta)
+                stick_beta_ptr[k] = prop[0]
+                #OMP_BARRIER 
 
-        # get new posterior
-        lpost_new = beta_post(stick_beta, beta, stick_weights, alpha0, alpha)
+                # get new posterior
+                lpost_new[0] = beta_post(stick_beta_ptr, beta_ptr,
+                                         stick_weights_ptr, alpha0, alpha,
+                                         J, ncomp, str_r, str_c, k, like_work, nthreads)
+                #if tid == 0:
+                # accept or reject
+                if R.exp(1.0) > lpost[0] - lpost_new[0]:
+                    #accept
+                    AR_ptr[k] += 1
+                    lpost[0] = lpost_new[0]
+                else:
+                    update_beta(beta_ptr, stick_beta_ptr[k], old_stick_beta_ptr[k], k, ncomp)
+                    #beta = break_sticks(stick_beta)
+                    stick_beta_ptr[k] = old_stick_beta_ptr[k]
+                #OMP_BARRIER 
 
-        # accept or reject
-        if R.exp(1.0) > lpost - lpost_new:
-            #accept
-            AR[k] += 1
-            lpost = lpost_new
-        else:
-            stick_beta[k] = old_stick_beta[k]
-            beta = break_sticks(stick_beta)
     del R
+    beta = break_sticks(stick_beta) # help avoid rounding errors
+    free(like_work)
+    free(prop)
+    free(lpost)
+    free(lpost_new)
     return stick_beta, beta
 
 @cython.boundscheck(False)
@@ -411,11 +475,20 @@ def sample_alpha0(np.ndarray[np.double_t, ndim=2] stick_weights,
                   np.ndarray[np.double_t, ndim=1] AR):
     # just reuse with dummy vars for beta things
     cdef rng_sampler[double] * R = new rng_sampler[double]()
-    cdef double lpost = beta_post(0.5*np.ones_like(beta), beta, stick_weights, alpha0, 1)
+    cdef int ncomp = beta.shape[0]
+    cdef int J = stick_weights.shape[0]
+    cdef int str_r = stick_weights.strides[0] / stick_weights.itemsize
+    cdef int str_c = stick_weights.strides[1] / stick_weights.itemsize
+    cdef np.ndarray[np.double_t] tmp_ones = 0.5*np.ones_like(beta)
+
+    cdef double* tmp = <double*>calloc(ncomp, sizeof(double))
+    cdef double lpost = beta_post(&tmp_ones[0], &beta[0], &stick_weights[0,0], alpha0, 1,
+                                  J, ncomp, str_r, str_c, 0, tmp, 0)
     lpost += log_gamma_pdf(alpha0, e0, f0)
     cdef double alpha0_old = alpha0
     alpha0 = fabs(R.normal(alpha0, prop_scale[-1]))
-    cdef double lpost_new = beta_post(0.5*np.ones_like(beta), beta, stick_weights, alpha0, 1)
+    cdef double lpost_new = beta_post(&tmp_ones[0], &beta[0], &stick_weights[0,0], alpha0, 1,
+                                      J, ncomp, str_r, str_c, 0, tmp, 0)
     lpost_new += log_gamma_pdf(alpha0, e0, f0)
     #accept or reject
     if R.exp(1) > lpost - lpost_new:
@@ -423,6 +496,7 @@ def sample_alpha0(np.ndarray[np.double_t, ndim=2] stick_weights,
     else:
         alpha0 = alpha0_old
     del R
+    free(tmp)
     return alpha0
 
 # ############ some python functions for testing ############

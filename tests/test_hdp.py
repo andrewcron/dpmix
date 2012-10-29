@@ -20,7 +20,7 @@ from hdp import HDPNormalMixture
 if __name__ == '__main__':
 
     J = 20
-    N = int(1e6)
+    N = int(1e5)
     K = 2
     ncomps = 3
     true_labels, data = generate_data(n=N, k=K, ncomps=ncomps)
@@ -34,7 +34,7 @@ if __name__ == '__main__':
     #mcmc = HDPNormalMixture(data, ncomp=3, gpu=[0,1,2], parallel=True, verbose=100)
     mcmc = HDPNormalMixture(data, ncomp=3, parallel=True, verbose=100, gpu=[0,1,2,3])
     mcmc.sample(100, nburn=1000, tune_interval=100)
-#    import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     imcmc = HDPNormalMixture(mcmc, verbose=100)
     imcmc.sample(100, nburn=0, ident=True)
     print imcmc.mu[-1]

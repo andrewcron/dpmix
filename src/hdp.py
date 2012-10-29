@@ -244,7 +244,7 @@ class HDPNormalMixture(DPNormalMixture):
             stick_weights, weights = self._update_stick_weights(counts, beta, alpha0)
             #stick_beta, beta = self._update_beta(stick_beta, beta, stick_weights, alpha0, alpha)
             stick_beta, beta = sampler.sample_beta(stick_beta, beta, stick_weights, alpha0,
-                                                   alpha, self.AR, self.prop_scale)
+                                                   alpha, self.AR, self.prop_scale, self.parallel)
             ## hyper parameters
             alpha = self._update_alpha(stick_beta)
             #alpha0 = self._update_alpha0(stick_weights, beta, alpha0)
