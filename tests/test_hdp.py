@@ -32,9 +32,9 @@ if __name__ == '__main__':
     data = [ all_data[(N/J*i):(N/J*(i+1))].copy() for i in range(J) ]
 
     #mcmc = HDPNormalMixture(data, ncomp=3, gpu=[0,1,2], parallel=True, verbose=100)
-    mcmc = HDPNormalMixture(data, ncomp=3, parallel=True, verbose=100, gpu=[0,1,2,3])
-    mcmc.sample(100, nburn=1000, tune_interval=100)
-    import pdb; pdb.set_trace()
+    mcmc = HDPNormalMixture(data, ncomp=3, parallel=True, verbose=100, gpu=[0,1,2,3,4])
+    mcmc.sample(100, nburn=1000, tune_interval=50)
+    #import pdb; pdb.set_trace()
     imcmc = HDPNormalMixture(mcmc, verbose=100)
     imcmc.sample(100, nburn=0, ident=True)
     print imcmc.mu[-1]

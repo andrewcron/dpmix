@@ -130,7 +130,7 @@ class HDPNormalMixture(DPNormalMixture):
             self._beta0 = break_sticks(self._stick_beta0)
             self._alpha00 = 1.0
             self.e0, self.f0 = g0, h0
-            self.prop_scale = 0.05 * np.ones(self.ncomp)
+            self.prop_scale = 0.01 * np.ones(self.ncomp) # start out small? more accepts?
             self.prop_scale[-1] = 1.
 
         else:
