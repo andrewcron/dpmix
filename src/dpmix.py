@@ -236,7 +236,7 @@ class DPNormalMixture(object):
                 labels, zref = self._update_labels(mu, Sigma, weights, True)
                 c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
                 for j in xrange(self.ncomp):
-                    c0[j,:] = np.sum(zref==i)
+                    c0[j,:] = np.sum(zref==j)
                 zhat = zref.copy()
 
 
@@ -261,6 +261,7 @@ class DPNormalMixture(object):
                 except IndexError:
                     print 'Something stranged happened ... do zref and zhat look correct?'
                     import pdb; pdb.set_trace()
+
                 _, iii = np.where(munkres(cost))
                 weights = weights[iii]
                 mu = mu[iii]
