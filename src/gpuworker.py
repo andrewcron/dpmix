@@ -114,14 +114,15 @@ while True:
                 densities = gpustats.mvnpdf_multi(gdata[dataind], mu, Sigma,
                                                   weights = w.flatten(), get=False, logged=True,
                                                   order='C')
+                if ttype==2: #relabel
+                    Z = np.asarray(cufuncs.gpu_apply_row_max(densities)[1].get(), dtype='i')
+                else:
+                    Z = None
 
                 labs = np.asarray(gsamp.sample_discrete(densities, logged=True), dtype='i')
                 subresult = [np.array(nobs, dtype='i'), labs, np.array(gid, dtype='i')]
-                if ttype==2:
-                    Z = np.asarray(cufuncs.gpu_apply_row_max(densities)[1].get(), dtype='i')
+                if Z is not None:
                     subresult.append(Z)
-                else:
-                    Z = None
 
                 results.append(subresult)
 
