@@ -110,7 +110,7 @@ def stick_break_proc(beta_a, beta_b, size=None):
     #check for bad values and deal with adhoc
     V[V<1e-10] = 1e-10; V[V>(1-1e-10)] = 1-1e-10
     nanmask = np.isnan(V)
-    if len(nanmask)>0:
+    if np.sum(nanmask)>0:
         V[nanmask] = beta_a / (beta_a + beta_b)
         
     pi = mixture_weights = np.empty(len(V) + 1)
