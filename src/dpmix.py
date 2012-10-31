@@ -104,16 +104,28 @@ class DPNormalMixture(object):
             if gpu and not _has_gpu:
                 print 'Warning: GPU load failed.'
             if _has_gpu:
+                import os
                 self.dev_list = np.asarray((0), dtype=np.int); self.dev_list.shape=1
+                self.dev_list = {os.uname()[1] : self.dev_list}
                 if gpu is not None:
                     if type(gpu) is bool:
                         self.gpu = gpu
+                    elif type(gpu) is dict:
+                        self.gpu = True
+                        self.dev_list = gpu.copy()
+                        for host in self.dev_list:
+                            self.dev_list[host] = np.asarray(self.dev_list[host],
+                                                             dtype=np.int)
+                            if self.dev_list[host].shape == ():
+                                self.dev_list[host].shape = 1
+
                     else:
                         self.gpu = True
                         self.dev_list = np.asarray(np.abs(gpu), dtype=np.int)
                         if self.dev_list.shape == ():
                             self.dev_list.shape = 1
                         self.dev_list = np.unique(self.dev_list)
+                        self.dev_list = {os.uname()[1] : self.dev_list}
                 else:
                     self.gpu = True
             else:

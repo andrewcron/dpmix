@@ -3,6 +3,10 @@ from mpi4py import MPI
 
 import numpy as np
 import time
+import os
+
+host_name = np.asarray(os.uname()[1], dtype='c')
+host_name_len = np.asarray(len(host_name), dtype='i')
 
 import pycuda.driver as drv
 import gpustats
@@ -30,6 +34,10 @@ comm = MPI.Comm.Get_parent()
 # 12 -- ctypes streams
 # 13 -- completed task
 
+# 20s -- results
+
+# 30s -- host name stuff
+
 _init = False
 _logmnflt = np.log(1e-37)
 iexp = ElementwiseKernel("float *z", "z[i] = (z[i] < -40.0) ? 0.0 : expf(z[i]);", "inplexp")
@@ -52,6 +60,10 @@ while True:
     if task == -1:
         break #poison pill 
     elif task == 0:
+        #send back the host name
+        comm.Send([host_name_len, MPI.INT], dest=0, tag=30)
+        comm.Send([host_name, MPI.CHAR], dest=0, tag=31)
+
         params = np.empty(3, dtype='i')
         comm.Recv([params, MPI.INT], source=0, tag=12)
         #print 'got params'

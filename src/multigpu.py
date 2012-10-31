@@ -12,10 +12,13 @@ from utils import BEM_Task, MCMC_Task, Init_Task
 _datadevmap = {}
 _dataind = {}
 
-def init_GPUWorkers(data, devslist=None):
+def init_GPUWorkers(data, devslist):
 
     worker_file = os.path.dirname(__file__) + os.sep + 'gpuworker.py'
-    ndev = len(devslist)
+    ndev = 0
+    for devs in devslist.itervalues():
+        ndev += len(devs)
+    devs_toinit = devslist.copy()
 
     workers = MPI.COMM_SELF.Spawn(sys.executable, args=[worker_file], maxprocs = ndev)
     ## dpmix and BEM
@@ -32,10 +35,21 @@ def init_GPUWorkers(data, devslist=None):
         for i in xrange(ndev):
             todat = np.asarray(data[partitions[i]:partitions[i+1]], dtype='d')
             task = np.array(0, dtype='i')
+            
             #task = Init_Task(todat.shape[0], todat.shape[1], int(devslist[i]))
             workers.Isend([task, MPI.INT], dest=i, tag=11)
             #print 'sent task'
-            params = np.array([todat.shape[0], todat.shape[1], int(devslist[i])], dtype='i')
+            # get the host name
+            host_name_len = np.array(0, dtype='i')
+            workers.Recv([host_name_len, MPI.INT], source=i, tag=30)
+            host_name = np.empty(int(host_name_len), dtype='c')
+            workers.Recv([host_name, MPI.CHAR], source=i, tag=31)
+            #get a device to init on that machine
+            hostdevs = devs_toinit[host_name.tostring()]
+            cdev = hostdevs[0]; hostdevs = np.delete(hostdevs, 0)
+            devs_toinit[host_name.tostring()] = hostdevs
+            
+            params = np.array([todat.shape[0], todat.shape[1], int(cdev)], dtype='i')
             workers.Send([params, MPI.INT], dest=i, tag=12)
             #print 'params'
             workers.Send([todat, MPI.DOUBLE], dest=i, tag=13)

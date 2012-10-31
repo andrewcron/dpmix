@@ -43,6 +43,8 @@ if __name__ == '__main__':
         use_gpu = options.gpu
     elif options.gpu == 'ALL':
         use_gpu = [0,1,2]
+    elif options.gpu == 'MPI':
+        use_gpu = {'lilo': 0, 'stitch' : 0 }
     else:
         use_gpu = int(options.gpu)
     verbosity = int(options.verbose)
