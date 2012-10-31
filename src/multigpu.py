@@ -61,12 +61,27 @@ def init_GPUWorkers(data, devslist):
     else: ## HDP .. one or more datasets per GPU
         ndata = len(data)
         for i in xrange(ndata):
-            dev = int(devslist[i%len(devslist)])
-            thd = i%len(devslist)
+            #dev = int(devsind[i%len(devsind)])
+            
+            thd = i%ndev
             todat = np.asarray(data[i], dtype='d')
             task = np.array(0, dtype='i')
             workers.Isend([task, MPI.INT], dest=thd, tag=11)
-            params = np.array([todat.shape[0], todat.shape[1], dev], dtype='i')
+
+            # get the host name
+            host_name_len = np.array(0, dtype='i')
+            workers.Recv([host_name_len, MPI.INT], source=thd, tag=30)
+            host_name = np.empty(int(host_name_len), dtype='c')
+            workers.Recv([host_name, MPI.CHAR], source=thd, tag=31)
+            #get a device to init on that machine
+            hostdevs = devs_toinit[host_name.tostring()]
+            if len(hostdevs)>0: #more to initialize
+                cdev = hostdevs[0]; hostdevs = np.delete(hostdevs, 0)
+                devs_toinit[host_name.tostring()] = hostdevs
+            else: #already initialized. ignored
+                cdev = 0
+
+            params = np.array([todat.shape[0], todat.shape[1], cdev], dtype='i')
             workers.Send([params, MPI.INT], dest=thd, tag=12)
             workers.Send([todat, MPI.DOUBLE], dest=thd, tag=13)
             dind = np.array(0, dtype='i')

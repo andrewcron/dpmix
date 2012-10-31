@@ -62,7 +62,7 @@ if __name__ == '__main__':
     print "use_gpu=" + str(use_gpu)
     mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
-    mcmc.sample(100,nburn=0)
+    mcmc.sample(100,nburn=1000)
     print mcmc.mu[-1]
     print mcmc.Sigma[-1]
 

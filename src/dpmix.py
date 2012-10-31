@@ -98,7 +98,7 @@ class DPNormalMixture(object):
             self.gamma = data.gamma
             self.gpu = data.gpu
             if self.gpu:
-                self.dev_list = np.unique(data.dev_list)
+                self.dev_list = data.dev_list
             self.parallel = data.parallel
         else:
             if gpu and not _has_gpu:
