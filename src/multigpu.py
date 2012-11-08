@@ -24,9 +24,9 @@ def init_GPUWorkers(data, devslist):
     ## dpmix and BEM
     if type(data) == np.ndarray:
         nobs, ndim = data.shape
-        lenpart = nobs / len(devslist)
+        lenpart = nobs / ndev
         partitions = range(0, nobs, lenpart); 
-        if len(partitions)==len(devslist):
+        if len(partitions)==ndev:
             partitions.append(nobs)
         else:
             partitions[-1] = nobs
