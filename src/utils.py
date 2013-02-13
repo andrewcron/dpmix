@@ -41,9 +41,20 @@ def mvn_weighted_logged(data, means, covs, weights):
     const = 0.5 * p * np.log(2*np.pi)
 
     for i in range(k):
-        chol = LA.cholesky(covs[i,:,:])
-        diff = np.dot(data - means[i,:], LA.inv(chol))
-        densities[:,i] = np.log(weights[i]) - const - np.log(np.diag(chol)).sum() - 0.5*(diff**2).sum(1)
+        if covs[i,:,:].shape == (1,1):
+            chol = np.sqrt(covs[i,:,:])
+            if chol == 0:
+                chol = np.array([1e-5])
+            diff = (data - means[i,:]) * 1.0/chol
+        else:
+            chol = LA.cholesky(covs[i,:,:])
+            diff = np.dot(data - means[i,:], LA.inv(chol))
+        try:
+            densities[:,i] = np.log(weights[i]) - const - np.log(np.diag(chol)).sum() - 0.5*(diff**2).sum(1)
+        except ValueError:
+            print chol
+            print np.diag(chol)
+            raise ValueError
 
     return densities
     
@@ -110,8 +121,11 @@ def stick_break_proc(beta_a, beta_b, size=None):
     #check for bad values and deal with adhoc
     V[V<1e-10] = 1e-10; V[V>(1-1e-10)] = 1-1e-10
     nanmask = np.isnan(V)
+
     if np.sum(nanmask)>0:
-        V[nanmask] = beta_a / (beta_a + beta_b)
+        value = beta_a / (beta_a + beta_b)
+        V[nanmask] = value[nanmask]
+        
         
     pi = mixture_weights = np.empty(len(V) + 1)
 
