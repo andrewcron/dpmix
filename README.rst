@@ -1,8 +1,8 @@
 =====
-pyCDP
+dpmix
 =====
 
-pyCDP is a library for understanding posterior distributions for
+dpmix is a library for understanding posterior distributions for
 Dirichlet and heirarchical Dirichlet mixtures of normal distributions
 represented by truncated stick breaking.
 
@@ -13,6 +13,8 @@ Requirements
 * SciPy
 * Cython
 * PyCUDA
+* cyarma
+* cyrand
 * scikits.cuda
 * gpustats
 * mpi4py
