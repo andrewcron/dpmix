@@ -3,6 +3,10 @@ from mpi4py import MPI
 
 import numpy as np
 import time
+import os
+
+host_name = np.asarray(os.uname()[1], dtype='c')
+host_name_len = np.asarray(len(host_name), dtype='i')
 
 import pycuda.driver as drv
 import gpustats
@@ -30,11 +34,16 @@ comm = MPI.Comm.Get_parent()
 # 12 -- ctypes streams
 # 13 -- completed task
 
+# 20s -- results
+
+# 30s -- host name stuff
+
 _init = False
 _logmnflt = np.log(1e-37)
 iexp = ElementwiseKernel("float *z", "z[i] = (z[i] < -40.0) ? 0.0 : expf(z[i]);", "inplexp")
 ### Code needs to be moved out of tasks ... pretty sure ...
 while True:
+    #print 'started'
     # get task ... manual wait to decrease CPU impact 2% load
     while True:
         if comm.Iprobe(source=0, tag=11):
@@ -44,12 +53,17 @@ while True:
     task = np.array(0, dtype='i')
     comm.Recv([task, MPI.INT], source=0, tag=11) # -1 -- kill, 0 -- init
     #print 'got task'
+
     #print task
 
     # process task or pill
     if task == -1:
         break #poison pill 
     elif task == 0:
+        #send back the host name
+        comm.Send([host_name_len, MPI.INT], dest=0, tag=30)
+        comm.Send([host_name, MPI.CHAR], dest=0, tag=31)
+
         params = np.empty(3, dtype='i')
         comm.Recv([params, MPI.INT], source=0, tag=12)
         #print 'got params'
@@ -86,27 +100,55 @@ while True:
         # get number of subtasks
         subtasknum = np.array(0, dtype='i')
         comm.Recv([subtasknum, MPI.INT], source=0, tag=12)
+        # put tasks and params in lists
+        a_params = []; a_w = []; a_mu = []; a_Sigma = []
+        for it in range(subtasknum):
+            #params
+            params = np.empty(4, dtype='i')
+            comm.Recv([params, MPI.INT], source=0, tag=13)            
+            dataind, ncomp, ttype, gid = params
+            nobs, ndim = alldata[dataind].shape
+            a_params.append(params)
+            # weights
+            w = np.empty(ncomp, dtype='d')
+            comm.Recv([w, MPI.DOUBLE], source=0, tag=21)
+            a_w.append(w)
+            # mu
+            mu = np.empty(ncomp*ndim, dtype='d')
+            comm.Recv([mu, MPI.DOUBLE], source=0, tag=22); 
+            mu = mu.reshape(ncomp, ndim)
+            a_mu.append(mu)
+            #Sigma
+            Sigma = np.empty(ncomp*ndim*ndim, dtype='d')
+            comm.Recv([Sigma, MPI.DOUBLE], source=0, tag=23); 
+            Sigma = Sigma.reshape(ncomp, ndim, ndim)
+            a_Sigma.append(Sigma)
 
         #for subtask in task:
         for it in range(subtasknum):
             # get task parameters
-            params = np.empty(4, dtype='i')
-            comm.Recv([params, MPI.INT], source=0, tag=13)
+            #params = np.empty(4, dtype='i')
+            #comm.Recv([params, MPI.INT], source=0, tag=13)
+            #dataind, ncomp, ttype, gid = params
+            params = a_params[it]
             dataind, ncomp, ttype, gid = params
             nobs, ndim = alldata[dataind].shape
             
             ## get other inputs via ctype streams! 
             # w
-            w = np.empty(ncomp, dtype='d')
-            comm.Recv([w, MPI.DOUBLE], source=0, tag=21)
+            #w = np.empty(ncomp, dtype='d')
+            #comm.Recv([w, MPI.DOUBLE], source=0, tag=21)
+            w = a_w[it]
             # mu
-            mu = np.empty(ncomp*ndim, dtype='d')
-            comm.Recv([mu, MPI.DOUBLE], source=0, tag=22); 
-            mu = mu.reshape(ncomp, ndim)
+            #mu = np.empty(ncomp*ndim, dtype='d')
+            #comm.Recv([mu, MPI.DOUBLE], source=0, tag=22); 
+            #mu = mu.reshape(ncomp, ndim)
+            mu = a_mu[it]
             # Sigma
-            Sigma = np.empty(ncomp*ndim*ndim, dtype='d')
-            comm.Recv([Sigma, MPI.DOUBLE], source=0, tag=23); 
-            Sigma = Sigma.reshape(ncomp, ndim, ndim)
+            #Sigma = np.empty(ncomp*ndim*ndim, dtype='d')
+            #comm.Recv([Sigma, MPI.DOUBLE], source=0, tag=23); 
+            #Sigma = Sigma.reshape(ncomp, ndim, ndim)
+            Sigma = a_Sigma[it]
             
             if ttype>0: # 1 -- just densities ... 2 -- relabel too
                 ## do GPU work ... 
@@ -114,7 +156,8 @@ while True:
                 densities = gpustats.mvnpdf_multi(gdata[dataind], mu, Sigma,
                                                   weights = w.flatten(), get=False, logged=True,
                                                   order='C')
-                if ttype==2: #relabel
+
+                if ttype==2: #identification!!
                     Z = np.asarray(cufuncs.gpu_apply_row_max(densities)[1].get(), dtype='i')
                 else:
                     Z = None
@@ -169,19 +212,19 @@ while True:
 
                 ## Free Everything
                 densities.gpudata.free()
-                
+        
         # send results summary
         numres = np.array(len(results), dtype='i')
-        comm.Send(numres, dest=0, tag=13)
+        comm.Isend(numres, dest=0, tag=13)
         # send details
         for subresult in results:
             tag = 21
             for res in subresult:
-                ##print 'sending results tag ' + str(tag)
                 if np.issubdtype(res.dtype, 'float'):
                     comm.Send([res, MPI.DOUBLE], dest=0, tag=tag)
                 else:
                     comm.Send([res, MPI.INT], dest=0, tag=tag)
+                #print 'sent results tag ' + str(tag) + ' from ' + str(comm.Get_rank())
                 tag += 1
 
 ## the end 

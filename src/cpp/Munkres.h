@@ -10,6 +10,7 @@
 //using namespace std;
 //using std::vector;
 #include <vector>
+#include <algorithm> 
 
 enum path_type { STARRED, PRIMED };
 class path_item {
@@ -25,16 +26,25 @@ class Munkres {
 public:
 	Munkres();
 	virtual ~Munkres();
-	std::vector<std::vector<bool> > solve(std::vector<std::vector<double> > icost);
+	void solve(double * icost, int* answer, int m, int n);
 private:
-	std::vector<std::vector<double> > cost;
-	std::vector<std::vector<bool> > starred;
-	std::vector<bool> covered_rows;
-	std::vector<bool> covered_cols;
-	std::vector<std::vector<bool> > primed;
-	double k;
-	int size;
+	double ** cost;
+	bool ** starred;
+	bool ** primed;
+	bool *covered_rows;
+	bool *covered_cols;
 
+	double k;
+	int rows;
+	int cols;
+	int smallest;
+	int largest;
+
+	int zi;
+	int zj;
+
+
+	void step0();
 	void step1();
 	void step2();
 	void step3();
@@ -52,8 +62,8 @@ private:
 	bool is_covered_col(int);
 	bool is_covered_row(int);
 	void prime(int, int);
-	bool find_zero(std::vector<std::vector<double> >, int*, int*);
-	float min_uncovered();
+	bool find_zero(int*, int*);
+	double min_uncovered();
 	int find_starred_zero_in_col(int);
 	int find_primed_zero_in_row(int);
 

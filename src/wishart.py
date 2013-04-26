@@ -25,6 +25,7 @@ def wishartrand(nu, phi):
                 foo[i,j] = np.sqrt(chi2.rvs(nu-(i+1)+1))
             else:
                 foo[i,j]  = npr.normal(0,1)
+
     return np.dot(chol, np.dot(foo, np.dot(foo.T, chol.T)))
     
     

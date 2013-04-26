@@ -11,6 +11,7 @@
 #include <math.h>
 #include <limits>
 #include <vector>
+#include <algorithm> 
 
 //using namespace std;
 //using std::vector;
@@ -34,54 +35,102 @@ Munkres::~Munkres() {
 	// TODO Auto-generated destructor stub
 }
 
-std::vector<std::vector<bool> > Munkres::solve(std::vector< std::vector<double> > icost) {
-	for(int i=0;i<icost.size();i++) {
-		cost.push_back(std::vector<double>());
-		starred.push_back(std::vector<bool>());
-		primed.push_back(std::vector<bool>());
-		covered_rows.push_back(0);
-		covered_cols.push_back(0);
+void Munkres::solve(double* icost, int* answer, int m, int n) {
+	rows = m;
+	cols = n;
+	cost = new double*[rows];
+	starred = new bool*[rows];
 
-		for(int j=0;j<icost[i].size();j++){
-			cost[i].push_back(icost[i][j]);
-			starred[i].push_back(0);
-			primed[i].push_back(0);
+	primed = new bool*[rows];
+	covered_rows = new bool[rows];
+	covered_cols = new bool[cols];
+
+	for (int i = 0; i < rows; i++) {
+		covered_rows[i] = false;
+	}
+	for (int i = 0; i < cols; i++) {
+		covered_cols[i] = false;
+	}
+
+	for (int i = 0; i < rows; i++) {
+		cost[i] = new double[cols];
+		starred[i] = new bool[cols];
+		primed[i] = new bool[cols];
+
+		for (int j = 0; j < cols; j++) {
+			cost[i][j] = icost[(i * cols) + j];
+			starred[i][j] = 0;
+			primed[i][j] = 0;
 		}
 	}
-	size = icost.size();
 
+	smallest = std::min(rows, cols);
+	largest = std::max(rows, cols);
+
+	if (rows > cols) {
+		step0();
+	} else {
+		k = min_uncovered();
+
+		step1();
+	}
+
+	int index = 0;
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < cols; j++) {
+			answer[index] = starred[i][j];
+			index++;
+		}
+	}
+
+	for (int i = 0; i < rows; i++) {
+		delete cost[i];
+		delete primed[i];
+		delete starred[i];
+	}
+	delete cost;
+	delete primed;
+	delete starred;
+	delete covered_rows;
+	delete covered_cols;
+
+}
+
+void Munkres::step0() {
+	int minimum;
+	for (int j = 0; j < cols; j++) {
+		minimum = cost[0][j];
+		for (int i = 0; i < rows; i++) {
+			if (minimum > cost[i][j]) {
+				minimum = cost[i][j];
+			}
+		}
+		for (int i = 0; i < rows; i++) {
+			cost[i][j] = cost[i][j] - minimum;
+		}
+	}
 	k = min_uncovered();
-
-	step1();
-//	for(int i=0;i<icost.size();i++) {
-//		for(int j=0;j<icost[i].size();j++){
-//			std::cout << starred[i][j] << ' ';
-//		}
-//		std::cout << std::endl;
-//	}
-	return starred;
+	step2();
 }
 
 void Munkres::step1() {
 	/*
-	 * subtract the smallest element from each row from that row.
+	 * subtract the smallest element of each row from that row.
 	 * goto step 2
 	 */
-	for(int i=0; i< size; i++)
-	{
-		std::vector<double > a = cost[i];
+	for (int i = 0; i < rows; i++) {
+		double * a = cost[i];
 		double m = std::numeric_limits<double>::infinity();
-		for(int cii=0; cii<a.size(); cii++){
-		      if (m > a[cii]){
-		    	  m = a[cii];
-		      }
+		for (int cii = 0; cii < cols; cii++) {
+			if (m > a[cii]) {
+				m = a[cii];
+			}
 		}
 
-		for(int cii=0; cii<a.size(); cii++){
+		for (int cii = 0; cii < cols; cii++) {
 			a[cii] = a[cii] - m;
 		}
 
-		cost[i] = a;
 	}
 	step2();
 }
@@ -92,15 +141,11 @@ void Munkres::step2() {
 	 *
 	 * goto step 3
 	 */
-	for(int i=0; i< size; i++)
-	{
-		for(int j=0; j< size; j++)
-		{
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < cols; j++) {
 
-			if (cost[i][j] == 0)
-			{
-				if (!is_starred_in_row_col(i,j))
-				{
+			if (cost[i][j] == 0) {
+				if (!is_starred_in_row_col(i, j)) {
 					starred[i][j] = 1;
 				}
 			}
@@ -114,19 +159,15 @@ void Munkres::step3() {
 	 * else goto step 4
 	 */
 	int cov_count = 0;
-	for(int i=0; i<size; i++)
-	{
-		for(int j=0; j<size; j++)
-		{
-			if (starred[i][j]==1)
-			{
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < cols; j++) {
+			if (starred[i][j] == 1) {
 				cover_col(j);
 				cov_count += 1;
 			}
 		}
 	}
-	if (cov_count != size)
-	{
+	if (cov_count != smallest) {
 		step4();
 	}
 
@@ -139,31 +180,27 @@ void Munkres::step4() {
 	 * once no uncovered exist goto step 6.
 	 */
 	bool done = false;
-	while(!done){
-		int i,j;
-		if (find_zero(cost,&i,&j))
-		{
-			if (!is_covered(i,j))
-			{
-				prime(i,j);
-				int a = starred_in_row(i);
-				if (a==-1) // if no starred zeros
+	int i = 0;
+	int j = 0;
+	int a;
+	while (!done) {
+		if (find_zero(&i, &j)) {
+			if (!is_covered(i, j)) {
+				prime(i, j);
+				a = starred_in_row(i);
+				if (a == -1) // if no starred zeros
 				{
 					done = true;
-					step5(i,j);
-				}
-				else
-				{
+					step5(i, j);
+				} else {
 					uncover_col(a);
 					cover_row(i);
 				}
 
 			}
-		}
-		else
-		{
+		} else {
 			done = true;
-			step6(min_uncovered());
+			step6( min_uncovered());
 		}
 	}
 }
@@ -180,51 +217,44 @@ void Munkres::step5(int i, int j) {
 	 * return to step 3.
 	 */
 	std::vector<path_item> path;
-	path.push_back(path_item(i,j,PRIMED));
+	path.push_back(path_item(i, j, PRIMED));
 	bool done = false;
 	int row = 0;
 	int col = j;
-	while(!done)
-	{
+	while (!done) {
 		row = find_starred_zero_in_col(col);
-		if (row!=-1)
-		{
-			path.push_back(path_item(row,col,STARRED));
+		if (row != -1) {
+			path.push_back(path_item(row, col, STARRED));
 			col = find_primed_zero_in_row(row);
-			path.push_back(path_item(row,col,PRIMED));
-		}
-		else
-		{
+			path.push_back(path_item(row, col, PRIMED));
+		} else {
 			done = true;
 		}
 	}
 
-	for(int i=0; i < path.size(); i++)
-	{
+	for (unsigned int i = 0; i < path.size(); i++) {
 		path_item item = path[i];
-		if (item.type==PRIMED) // primed so we star
+		if (item.type == PRIMED) // primed so we star
 		{
 			starred[item.row][item.col] = 1;
-		}
-		else
-		{ // we're starred so we unstar
+		} else { // we're starred so we unstar
 			starred[item.row][item.col] = 0;
 		}
 	}
 	// remove all primes
-	for(int i=0; i<primed.size(); i++){
-		for(int j=0;j<primed[i].size(); j++){
+	for (unsigned int i = 0; i < rows; i++) {
+		for (unsigned int j = 0; j < cols; j++) {
 			primed[i][j] = 0;
 		}
 	}
-	for(int i=0; i<covered_rows.size(); i++){
+	for (unsigned int i = 0; i < rows; i++) {
 		covered_rows[i] = 0;
 	}
 	// uncover all covered lines
-	for(int i=0; i<covered_rows.size(); i++){
+	for (unsigned int i = 0; i < rows; i++) {
 		covered_rows[i] = 0;
 	}
-	for(int i=0; i<covered_cols.size(); i++){
+	for (unsigned int i = 0; i < cols; i++) {
 		covered_cols[i] = 0;
 	}
 	step3();
@@ -234,19 +264,18 @@ void Munkres::step6(double val) {
 	 * then subtract it from every uncovered column.
 	 * return to step 4
 	 */
-	for (int i=0; i < size; i++)
-	{
-		// fix this....
-		if (!is_covered_col(i))
-		{ // uncovered column
-			for(int j=0;j<cost.size();j++){
-			    cost[j][i]-= val;
+
+	for (int i = 0; i < rows; i++) {
+		if (is_covered_row(i)) {
+			for (int j = 0; j < cols; j++) {
+				cost[i][j] += val;
 			}
 		}
-		if (is_covered_row(i))
-		{
-			for(int j=0;j<cost[i].size();j++){
-			    cost[i][j]+= val;
+	}
+	for (int i = 0; i < cols; i++) {
+		if (!is_covered_col(i)) { // uncovered column
+			for (int j = 0; j < rows; j++) {
+				cost[j][i] -= val;
 			}
 		}
 	}
@@ -254,33 +283,31 @@ void Munkres::step6(double val) {
 }
 
 bool Munkres::is_starred_in_row_col(int row, int col) {
-	std::vector<bool> a = starred[row];
-	std::vector<bool> b;
-	for(int r = 0; r < starred.size(); r++){
-		b.push_back(starred[r][col]);
-	}
-	for(int r=0; r< a.size(); r++){
-		if(a[r]!=0){
+	bool * a = starred[row];
+
+	for (int r = 0; r < cols; r++) {
+		if (a[r] != 0) {
 			return true;
 		}
 	}
-	for(int r=0; r< b.size(); r++){
-		if(b[r]!=0){
+
+	for (int r = 0; r < row; r++) {
+		if (starred[r][col] != 0) {
 			return true;
 		}
 	}
+
 	// fall through to false
+
 	return false;
 }
 
 int Munkres::starred_in_row(int row) {
 	// find a starred value in a row
-	std::vector<bool> a = starred[row];
+	bool * a = starred[row];
 
-	for(int i=0;i<a.size();i++)
-	{
-		if(a[i]==1)
-		{
+	for (int i = 0; i < cols; i++) {
+		if (a[i] == 1) {
 			return i;
 		}
 	}
@@ -309,12 +336,9 @@ void Munkres::uncover_row(int row) {
 
 bool Munkres::is_covered(int row, int col) {
 	// check if a position in a covered row or column
-	if ((covered_rows[row] == 1) || (covered_cols[col]==1))
-	{
+	if ((covered_rows[row] == 1) || (covered_cols[col] == 1)) {
 		return true;
-	}
-	else
-	{
+	} else {
 		return false;
 	}
 }
@@ -323,40 +347,31 @@ bool Munkres::is_covered_col(int col) {
 	// check if a column is covered
 	if (covered_cols[col] == 1) {
 		return true;
-	}
-	else
-	{
+	} else {
 		return false;
 	}
 }
 
 bool Munkres::is_covered_row(int row) {
 	// check if a row is covered
-	if (covered_rows[row]==1) {
+	if (covered_rows[row] == 1) {
 		return true;
-	}
-	else
-	{
+	} else {
 		return false;
 	}
 }
-
 
 void Munkres::prime(int row, int col) {
 	// prime a postion
 	primed[row][col] = 1;
 }
 
-bool Munkres::find_zero(std::vector<std::vector<double> > mat, int* row, int* col) {
+bool Munkres::find_zero(int* row, int* col) {
 	// find a zero thats uncovered
-	for (int i =0; i< size; i++)
-	{
-		for (int j = 0; j< size; j++)
-		{
-			if (mat[i][j] == 0)
-			{
-				if (!is_covered(i,j))
-				{
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < cols; j++) {
+			if (cost[i][j] == 0) {
+				if (!is_covered(i, j)) {
 					*row = i;
 					*col = j;
 					return true;
@@ -367,19 +382,15 @@ bool Munkres::find_zero(std::vector<std::vector<double> > mat, int* row, int* co
 	return false;
 }
 
-float Munkres::min_uncovered() {
+double Munkres::min_uncovered() {
 	// find the minumum uncovered value in the cost matrix.
 
 	double min = std::numeric_limits<double>::infinity();
 
-	for (int i =0; i< size; i++)
-	{
-		for (int j = 0; j< size; j++)
-		{
-			if (!is_covered(i,j))
-			{
-				if(cost[i][j] < min)
-				{
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < cols; j++) {
+			if (!is_covered(i, j)) {
+				if (cost[i][j] < min) {
 					min = cost[i][j];
 				}
 			}
@@ -390,13 +401,8 @@ float Munkres::min_uncovered() {
 
 int Munkres::find_starred_zero_in_col(int col) {
 	// given a column find a starred zero in it, otherwise return -1
-	std::vector<double> a;
-	for(int j=0; j<cost.size();j++){
-		a.push_back(cost[j][col]);
-	}
-	for (int i = 0; i < size; i++)
-	{
-		if ((starred[i][col] == 1) && (a[i] == 0)) // if it's starrred it should be zero but check just in case....
+	for (int i = 0; i < rows; i++) {
+		if ((starred[i][col] == true))
 			return i;
 	}
 	return -1;
@@ -404,37 +410,10 @@ int Munkres::find_starred_zero_in_col(int col) {
 
 int Munkres::find_primed_zero_in_row(int row) {
 	// given a row, find if it has a primed zero in it, otherwise return -1
-	std::vector<double> a = cost[row];
-	for (int i = 0; i <size; i++)
-	{
-		if ((primed[row][i] == 1) && (a[i] == 0)) // if it's primed it should be a zero, but check just in case...
+	for (int i = 0; i < cols; i++) {
+		if ((primed[row][i] == true))
 			return i;
 	}
 	return -1;
 }
-
-
-//int main() {
-//	std::cout << "MAIN" << std::endl;
-//	Munkres m;
-//	std::vector<std::vector<double> > cost(3, std::vector<double>(3,0));
-//	cost[0][0] = 7;
-//	cost[0][1] = 4;
-//	cost[0][2] = 3;
-//	cost[1][0] = 6;
-//	cost[1][1] = 8;
-//	cost[1][2] = 5;
-//	cost[2][0] = 9;
-//	cost[2][1] = 4;
-//	cost[2][2] = 4;
-//	std::cout << "starting" << std::endl;
-//	std::vector<std::vector<bool> > a = m.solve(cost);
-//	for (int i=0;i<3;i++) {
-//			for (int j=0;j<3;j++) {
-//				std::cout<< a[i][j] << ' ';
-//			}
-//			std::cout<< std::endl;
-//		}
-//	return 0;
-//}
 

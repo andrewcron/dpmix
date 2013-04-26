@@ -6,15 +6,15 @@ Created on Mar 15, 2012
 '''
 import sys
 #sys.path.insert(0, '../build/lib.linux-x86_64-2.7/')
-#sys.path.insert(0, "../src")
+sys.path.insert(0, "./src")
 
 import numpy as np
 import numpy.random as npr
 import pymc as pm
 #
-#from dpmix import DPNormalMixture
-#from BEM import BEM_DPNormalMixture
-from dpmix import DPNormalMixture, BEM_DPNormalMixture
+from dpmix import DPNormalMixture
+from BEM import BEM_DPNormalMixture
+#from dpmix import DPNormalMixture, BEM_DPNormalMixture
 
 #import gpustats as gs
 
@@ -42,7 +42,9 @@ if __name__ == '__main__':
     if type(options.gpu) is bool:
         use_gpu = options.gpu
     elif options.gpu == 'ALL':
-        use_gpu = [0,1,2,3]
+        use_gpu = [0,1,2]
+    elif options.gpu == 'MPI':
+        use_gpu = {'lilo': 0, 'stitch' : 0 }
     else:
         use_gpu = int(options.gpu)
     verbosity = int(options.verbose)
@@ -60,15 +62,16 @@ if __name__ == '__main__':
     print "use_gpu=" + str(use_gpu)
     mcmc = DPNormalMixture(data, ncomp=3, gpu=use_gpu, verbose=verbosity, 
                            parallel=options.parallel)#, mu0=mu0)
-    mcmc.sample(200,nburn=0)
+    mcmc.sample(100,nburn=1000)
     print mcmc.mu[-1]
+    print mcmc.Sigma[-1]
 
     bem = BEM_DPNormalMixture(mcmc, verbose=verbosity)
     bem.optimize(maxiter=5)
     print bem.mu
-
+    
     ident_mcmc = DPNormalMixture(bem, verbose=verbosity)
-    ident_mcmc.sample(100, nburn=0, ident=True)
+    ident_mcmc.sample(100, nburn=0, ident=False)
     print ident_mcmc.weights[-1]
     print ident_mcmc.mu[-1]
 
