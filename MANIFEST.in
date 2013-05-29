@@ -1,0 +1,5 @@
+include setup.py
+include README.rst
+recursive-include src *.py *.c *.cpp *.h *.hpp *.cu *.pyx
+recursive-include tests *.py *.c *.cpp *.h *.hpp *.cu *.pyx
+

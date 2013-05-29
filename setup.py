@@ -14,7 +14,7 @@ from cyrand import include_dir as rng_dir
 
 
 setup(name='dpmix',
-      version='0.2',
+      version='0.3',
       packages=['dpmix'],
       package_dir={'dpmix': 'src'},
       description='Optimized (and optionally gpu enhaced) fitting of Gaussian Mixture Models',
@@ -33,7 +33,7 @@ setup(name='dpmix',
       cmdclass = {'build_ext': build_ext},
       ext_modules = [Extension("dpmix.munkres", 
                                ["src/munkres.pyx", "src/cpp/Munkres.cpp"],
-                               include_dirs = [get_include(), 'src/cpp'],
+                               include_dirs = [get_include(), 'src/cpp', 'cpp/'],
                                language='c++'),
                      Extension("dpmix.sampler",
                                ["src/sampler_utils.pyx"],
