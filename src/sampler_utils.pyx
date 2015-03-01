@@ -205,7 +205,8 @@ cdef vec __sample_mu_Sigma(mat * mu, cube * Sigma, vec * labels, mat * data,
                            vec * hdp_rngs, do_parallel=True, hdp=False):
     cdef bool is_hdp
     cdef int k, nthd, chunk, i, J, cnt
-    cdef rng_sampler[double] * R = new rng_sampler[double]()
+    cdef unsigned long Seed = np.random.randint(2**32)
+    cdef rng_sampler[double] * R = new rng_sampler[double](Seed)
     cdef int p = mu.n_rows
     cdef int ncomp = mu.n_cols
 
@@ -393,8 +394,8 @@ def sample_beta(np.ndarray[np.double_t, ndim=1] stick_beta,
                 np.ndarray[np.double_t, ndim=1] prop_scale,
                 do_parallel = False):
 
-
-    cdef rng_sampler[double] * R = new rng_sampler[double]()
+    cdef unsigned long Seed = np.random.randint(2**32)
+    cdef rng_sampler[double] * R = new rng_sampler[double](Seed)
     cdef np.ndarray[np.double_t] old_stick_beta = stick_beta.copy()
     cdef np.ndarray[np.double_t] old_beta = beta.copy()
     # to make it GIL free, get pointers to all array data        
@@ -474,7 +475,8 @@ def sample_alpha0(np.ndarray[np.double_t, ndim=2] stick_weights,
                   np.ndarray[np.double_t, ndim=1] prop_scale,
                   np.ndarray[np.double_t, ndim=1] AR):
     # just reuse with dummy vars for beta things
-    cdef rng_sampler[double] * R = new rng_sampler[double]()
+    cdef unsigned long Seed = np.random.randint(2**32)
+    cdef rng_sampler[double] * R = new rng_sampler[double](Seed)
     cdef int ncomp = beta.shape[0]
     cdef int J = stick_weights.shape[0]
     cdef int str_r = stick_weights.strides[0] / stick_weights.itemsize
@@ -531,7 +533,3 @@ def pymvnorm_prec(np.ndarray[np.double_t, ndim=1] mu,
                                       deref(numpy_to_mat(Sigma)), deref(R))
     del R
     return vec_to_numpy(result, None)
-
-
-
-
