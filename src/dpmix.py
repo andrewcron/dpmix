@@ -311,8 +311,7 @@ class DPNormalMixture(object):
     def _update_labels(self, mu, Sigma, weights, ident=False):
         if self.gpu:
             # GPU business happens?
-	    #print self.data.shape, weights.shape, mu.shape, Sigma.shape
-            return get_labelsGPU(self.gpu_workers, weights, mu, Sigma, relabel=ident) 
+            return get_labelsGPU(self.gpu_workers, weights, mu, Sigma, relabel=ident)
         else:
             densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
             #self._densities = densities
