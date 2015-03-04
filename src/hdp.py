@@ -1,12 +1,9 @@
 from __future__ import division
 
 import numpy as np
-import numpy.random as npr
 from scipy import stats
-#import multiprocessing
 
-
-from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, select_gpu
+from utils import mvn_weighted_logged, sample_discrete, stick_break_proc
 from utils import break_sticks
 from dpmix import DPNormalMixture
 
@@ -22,7 +19,8 @@ try:
     import pycuda
     import pycuda.driver
     try:
-        from multigpu import init_GPUWorkers, kill_GPUWorkers, get_hdp_labels_GPU
+        from multigpu import init_GPUWorkers, kill_GPUWorkers, \
+            get_hdp_labels_GPU
         _has_gpu = True
     except (ImportError, pycuda._driver.RuntimeError):
         _has_gpu = False
@@ -83,7 +81,7 @@ class HDPNormalMixture(DPNormalMixture):
             # check for functioning gpu
             if _has_gpu:
                 import os
-                self.dev_list = np.asarray((0), dtype=np.int)
+                self.dev_list = np.asarray(0, dtype=np.int)
                 self.dev_list.shape = 1
                 self.dev_list = {os.uname()[1]: self.dev_list}
                 if gpu is not None:
@@ -158,7 +156,10 @@ class HDPNormalMixture(DPNormalMixture):
         else:
             # get all important vars from input class
             self.data = data.data
-            self.ngroups, self.nobs, self.ndim, self.ncomp = data.ngroups, data.nobs, data.ndim, data.ncomp
+            self.ngroups = data.ngroups
+            self.nobs = data.nobs
+            self.ndim = data.ndim
+            self.ncomp = data.ncomp
             self.cumobs = data.cumobs.copy()
             self._weights0 = data.weights[-1].copy()
             self._stick_beta0 = data.stick_beta.copy()
@@ -225,50 +226,51 @@ class HDPNormalMixture(DPNormalMixture):
                     print i
             # update labels
             labels, zhat = self._update_labels(mu, Sigma, weights)
-            ## Get initial reference if needed
-            if i==0 and ident:
+
+            # Get initial reference if needed
+            if i == 0 and ident:
                 zref = []
                 for ii in xrange(self.ngroups):
                     zref.append(zhat[ii].copy())
                 c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
                 for j in xrange(self.ncomp):
                     for ii in xrange(self.ngroups):
-                        c0[j,:] += np.sum(zref[ii]==j)
+                        c0[j, :] += np.sum(zref[ii] == j)
 
-            ## update mu and sigma
+            # update mu and sigma
             counts = self._update_mu_Sigma(mu, Sigma, labels, self.alldata)
 
-            ## update weights, masks
+            # update weights, masks
             stick_weights, weights = self._update_stick_weights(counts, beta, alpha0)
-            stick_beta, beta = sampler.sample_beta(stick_beta, beta, stick_weights, alpha0,
-                                                   alpha, self.AR, self.prop_scale, self.parallel)
-            ## hyper parameters
+            stick_beta, beta = sampler.sample_beta(
+                stick_beta, beta, stick_weights, alpha0,
+                alpha, self.AR, self.prop_scale, self.parallel
+            )
+            # hyper parameters
             alpha = self._update_alpha(stick_beta)
-            #alpha0 = self._update_alpha0(stick_weights, beta, alpha0)
             alpha0 = sampler.sample_alpha0(stick_weights, beta, alpha0,
                                            self.e0, self.f0,
                                            self.prop_scale, self.AR)
-            #import pdb; pdb.set_trace()
 
-            ## Relabel
-            if i>0 and ident:
+            # Relabel
+            if i > 0 and ident:
                 cost = c0.copy()
                 for Z, Zr in zip(zhat, zref):
                     _get_cost(Zr, Z, cost)
                 _, iii = np.where(munkres(cost))
                 beta = beta[iii]
-                weights = weights[:,iii]
+                weights = weights[:, iii]
                 mu = mu[iii]
                 Sigma = Sigma[iii]
-            ## save
-            if i>=0:
+            # save
+            if i >= 0:
                 self.beta[i] = beta
                 self.weights[i] = weights
                 self.alpha[i] = alpha
                 self.alpha0[i] = alpha0
                 self.mu[i] = mu
                 self.Sigma[i] = Sigma
-            elif (nburn+i+1)%self._tune_interval == 0:
+            elif (nburn+i+1) % self._tune_interval == 0:
                 self._tune()
         self.stick_beta = stick_beta.copy()
         if self.gpu:
@@ -295,7 +297,7 @@ class HDPNormalMixture(DPNormalMixture):
                 densities = mvn_weighted_logged(self.data[j], mu, Sigma, weights[j])
                 labels[j] = sample_discrete(densities).squeeze()
                 if self._ident:
-                    zhat.append(np.asarray(densities.argmax(1),dtype='i'))
+                    zhat.append(np.asarray(densities.argmax(1), dtype='i'))
 
         return labels, zhat
 

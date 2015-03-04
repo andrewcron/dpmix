@@ -128,12 +128,22 @@ while True:
                                                   order='C')
 
                 if ttype == 2:  # identification!!
-                    Z = np.asarray(cufuncs.gpu_apply_row_max(densities)[1].get(), dtype='i')
+                    Z = np.asarray(
+                        cufuncs.gpu_apply_row_max(densities)[1].get(),
+                        dtype='i'
+                    )
                 else:
                     Z = None
 
-                labs = np.asarray(gsamp.sample_discrete(densities, logged=True), dtype='i')
-                subresult = [np.array(nobs, dtype='i'), labs, np.array(gid, dtype='i')]
+                labs = np.asarray(
+                    gsamp.sample_discrete(densities, logged=True),
+                    dtype='i'
+                )
+                subresult = [
+                    np.array(nobs, dtype='i'),
+                    labs,
+                    np.array(gid, dtype='i')
+                ]
                 if Z is not None:
                     subresult.append(Z)
 

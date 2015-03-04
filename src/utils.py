@@ -11,6 +11,7 @@ import scipy.stats as stats
 
 import cython
 
+
 def select_gpu(devNum):
     """
     sets the devNum device as the active GPU if it's not already

@@ -22,7 +22,12 @@ def init_GPUWorkers(data, devslist):
         ndev += len(devs)
     devs_toinit = devslist.copy()
 
-    workers = MPI.COMM_SELF.Spawn(sys.executable, args=[worker_file], maxprocs=ndev)
+    workers = MPI.COMM_SELF.Spawn(
+        sys.executable,
+        args=[worker_file],
+        maxprocs=ndev
+    )
+
     # dpmix and BEM
     if type(data) == np.ndarray:
         nobs, ndim = data.shape
@@ -52,7 +57,10 @@ def init_GPUWorkers(data, devslist):
             hostdevs = np.delete(hostdevs, 0)
             devs_toinit[host_name.tostring()] = hostdevs
             
-            params = np.array([todat.shape[0], todat.shape[1], int(cdev)], dtype='i')
+            params = np.array(
+                [todat.shape[0], todat.shape[1], int(cdev)],
+                dtype='i'
+            )
             workers.Send([params, MPI.INT], dest=i, tag=12)
             workers.Send([todat, MPI.DOUBLE], dest=i, tag=13)
             workers.Recv([task, MPI.INT], source=i, tag=14)
@@ -108,7 +116,9 @@ def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
 
     # setup task
     for i in xrange(ndata):
-        tasks[_datadevmap[i]].append(MCMC_Task(Sigma.shape[0], relabel, _dataind[i], i))
+        tasks[_datadevmap[i]].append(
+            MCMC_Task(Sigma.shape[0], relabel, _dataind[i], i)
+        )
 
     for i in xrange(ndev):
         # send the number of tasks
@@ -118,12 +128,32 @@ def get_hdp_labels_GPU(workers, w, mu, Sigma, relabel=False):
         workers.Send([numtasks, MPI.INT], dest=i, tag=12)
 
         for tsk in tasks[i]:
-            params = np.array([tsk.dataind, tsk.ncomp, int(tsk.relabel)+1, tsk.gid], dtype='i')
+            params = np.array(
+                [
+                    tsk.dataind,
+                    tsk.ncomp,
+                    int(tsk.relabel) + 1,
+                    tsk.gid
+                ],
+                dtype='i'
+            )
             workers.Send([params, MPI.INT], dest=i, tag=13)
 
-            workers.Send([np.asarray(w[tsk.gid].copy(), dtype='d'), MPI.DOUBLE], dest=i, tag=21)
-            workers.Send([np.asarray(mu, dtype='d'), MPI.DOUBLE], dest=i, tag=22)
-            workers.Send([np.asarray(Sigma, dtype='d'), MPI.DOUBLE], dest=i, tag=23)
+            workers.Send(
+                [np.asarray(w[tsk.gid].copy(), dtype='d'), MPI.DOUBLE],
+                dest=i,
+                tag=21
+            )
+            workers.Send(
+                [np.asarray(mu, dtype='d'), MPI.DOUBLE],
+                dest=i,
+                tag=22
+            )
+            workers.Send(
+                [np.asarray(Sigma, dtype='d'), MPI.DOUBLE],
+                dest=i,
+                tag=23
+            )
 
     # wait for results from any device in any order ... 
     res_devs = [_i for _i in range(ndev)]
@@ -153,7 +183,6 @@ def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
     # run all the threads
     ndev = workers.remote_group.size
     nobs, i = 0, 0
-    partitions = [0]
 
     for i in xrange(ndev):
         # give new params
@@ -170,12 +199,11 @@ def get_labelsGPU(workers, w, mu, Sigma, relabel=False):
         workers.Send([np.asarray(Sigma, dtype='d'), MPI.DOUBLE], dest=i, tag=23)
 
     # gather the results
-    labs = []
-    Zs = []
     res_devs = [_i for _i in range(ndev)]
     partitions = np.empty(ndev, dtype=np.int)
     labs = [None for _i in range(ndev)]
     Zs = [None for _i in range(ndev)]
+
     while len(res_devs) > 0:
         for i in res_devs:
             if workers.Iprobe(source=i, tag=13):

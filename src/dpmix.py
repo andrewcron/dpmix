@@ -6,17 +6,13 @@ Ishwaran & James (2001) Gibbs Sampling Methods for Stick-Breaking Priors
 """
 from __future__ import division
 
-import time
-
 import numpy as np
 import numpy.random as npr
 
-from utils import mvn_weighted_logged, sample_discrete, _get_mask, stick_break_proc, select_gpu
-#from multicpu import CPUWorker, CompUpdate
+from utils import mvn_weighted_logged, sample_discrete, stick_break_proc
 
-from wishart import invwishartrand, invwishartrand_prec
+from wishart import invwishartrand_prec
 
-#import multiprocessing
 import sampler
 
 try:
@@ -25,7 +21,7 @@ except ImportError:
     _has_munkres = False
     
 
-# check for gpustats compatability
+# check for gpustats compatibility
 try:
     import pycuda
     import pycuda.driver
@@ -33,7 +29,7 @@ try:
         from multigpu import init_GPUWorkers, get_labelsGPU, kill_GPUWorkers
         _has_gpu = True
     except (ImportError, pycuda.driver.RuntimeError):
-        _has_gpu=False
+        _has_gpu = False
 except ImportError:
     _has_gpu = False
 
@@ -105,8 +101,9 @@ class DPNormalMixture(object):
                 print 'Warning: GPU load failed.'
             if _has_gpu:
                 import os
-                self.dev_list = np.asarray((0), dtype=np.int); self.dev_list.shape=1
-                self.dev_list = {os.uname()[1] : self.dev_list}
+                self.dev_list = np.asarray(0, dtype=np.int)
+                self.dev_list.shape = 1
+                self.dev_list = {os.uname()[1]: self.dev_list}
                 if gpu is not None:
                     if type(gpu) is bool:
                         self.gpu = gpu
@@ -114,8 +111,10 @@ class DPNormalMixture(object):
                         self.gpu = True
                         self.dev_list = gpu.copy()
                         for host in self.dev_list:
-                            self.dev_list[host] = np.asarray(self.dev_list[host],
-                                                             dtype=np.int)
+                            self.dev_list[host] = np.asarray(
+                                self.dev_list[host],
+                                dtype=np.int
+                            )
                             if self.dev_list[host].shape == ():
                                 self.dev_list[host].shape = 1
 
@@ -125,7 +124,7 @@ class DPNormalMixture(object):
                         if self.dev_list.shape == ():
                             self.dev_list.shape = 1
                         self.dev_list = np.unique(self.dev_list)
-                        self.dev_list = {os.uname()[1] : self.dev_list}
+                        self.dev_list = {os.uname()[1]: self.dev_list}
                 else:
                     self.gpu = True
             else:
@@ -138,9 +137,9 @@ class DPNormalMixture(object):
             # TODO hyperparameters
             # prior mean for component means
             if m0 is not None:
-                if len(m0)==self.ndim:
+                if len(m0) == self.ndim:
                     self.mu_prior_mean = m0.copy()
-                elif len(m0)==1:
+                elif len(m0) == 1:
                     self.mu_prior_mean = m0*np.ones(self.ndim)
             else:
                 self.mu_prior_mean = np.zeros(self.ndim)
@@ -148,30 +147,14 @@ class DPNormalMixture(object):
             self.gamma = gamma0*np.ones(ncomp)
             self.parallel = parallel
                         
-        #verbosity
         self.verbose = verbose
         
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, e0, f0)
-        ## Check data for non-contiguous crap
+
+        # Check data for non-contiguous crap
         if not (self.data.flags["C_CONTIGUOUS"] or self.data.flags["F_CONTIGUOUS"]):
             self.data = self.data.copy()
-        
-        ## multiCPU stuf
-#         if self.parallel:
-#             self.num_cores = min(multiprocessing.cpu_count(), self.ncomp)
-#             compsperdev = self.ncomp / self.num_cores
-#             self.work_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
-#             self.result_queue = [ multiprocessing.Queue() for i in xrange(self.num_cores) ]
-#             self.workers = [ CPUWorker(self.data, self.gamma, self.mu_prior_mean, 
-#                                        self._Phi0, self._nu0, self.work_queue[i], self.result_queue[i])
-#                              for i in xrange(self.num_cores) ]
-#             self.compsdevmap = {}; cumcomps = 0
-#             for i in xrange(self.num_cores):
-#                 self.compsdevmap[i] = [int(cumcomps), int(min(cumcomps+compsperdev, self.ncomp))]
-#                 cumcomps += compsperdev
-#             self.compsdevmap[self.num_cores-1][1] = self.ncomp
-
         
     def _set_initial_values(self, alpha0, nu0, Phi0, mu0, Sigma0, weights0,
                             e0, f0):
@@ -187,18 +170,18 @@ class DPNormalMixture(object):
             Sigma0 = np.empty((self.ncomp, self.ndim, self.ndim))
             for j in xrange(self.ncomp):
                 Sigma0[j] = invwishartrand_prec(nu0 + 1 + self.ndim, Phi0[j])
-            #Sigma0 = Phi0.copy()
 
         # starting values, are these sensible?
         if mu0 is None:
             mu0 = np.empty((self.ncomp, self.ndim))
             for j in xrange(self.ncomp):
-                mu0[j] = npr.multivariate_normal(np.zeros((self.ndim)),
-                                           self.gamma[j]*Sigma0[j])
+                mu0[j] = npr.multivariate_normal(
+                    np.zeros(self.ndim),
+                    self.gamma[j] * Sigma0[j]
+                )
 
         if weights0 is None:
             weights0 = (1/self.ncomp)*np.ones((self.ncomp, 1))
-            #_, weights0 = stick_break_proc(1, 1, size=self.ncomp - 1)
 
         self._alpha0 = alpha0
         self.e = e0
@@ -207,8 +190,8 @@ class DPNormalMixture(object):
         self._weights0 = weights0
         self._mu0 = mu0
         self._Sigma0 = Sigma0
-        self._nu0 = nu0 # prior degrees of freedom
-        self._Phi0 = Phi0 # prior location for Sigma_j's
+        self._nu0 = nu0  # prior degrees of freedom
+        self._Phi0 = Phi0  # prior location for Sigma_j's
 
     def sample(self, niter=1000, nburn=0, thin=1, ident=False):
         """
@@ -223,11 +206,7 @@ class DPNormalMixture(object):
 
         self._setup_storage(niter)
 
-        # start threads
-#         if self.parallel:
-#             for w in self.workers:
-#                 w.start()
-
+        # create workers
         if self.gpu:
             self.gpu_workers = init_GPUWorkers(self.data, self.dev_list)
 
@@ -244,13 +223,11 @@ class DPNormalMixture(object):
 
         for i in range(-nburn, niter):
 
-            if i==0 and ident:
+            if i == 0 and ident:
                 labels, zref = self._update_labels(mu, Sigma, weights, True)
                 c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
                 for j in xrange(self.ncomp):
-                    c0[j,:] = np.sum(zref==j)
-                zhat = zref.copy()
-
+                    c0[j, :] = np.sum(zref == j)
 
             if isinstance(self.verbose, int) and self.verbose and \
                     not isinstance(self.verbose, bool):
@@ -264,30 +241,27 @@ class DPNormalMixture(object):
 
             alpha = self._update_alpha(stick_weights)
 
-
-            ## relabel if needed:
-            if i>0 and ident:
+            # relabel if needed:
+            if i > 0 and ident:
                 cost = c0.copy()
                 try:
-                    _get_cost(zref, zhat, cost) #cython!!
+                    _get_cost(zref, zhat, cost)  # cython!!
                 except IndexError:
                     print 'Something stranged happened ... do zref and zhat look correct?'
-                    import pdb; pdb.set_trace()
+                    import pdb
+                    pdb.set_trace()
 
                 _, iii = np.where(munkres(cost))
                 weights = weights[iii]
                 mu = mu[iii]
                 Sigma = Sigma[iii]
-            if i>=0:
+            if i >= 0:
                 self.weights[i] = weights
                 self.alpha[i] = alpha
                 self.mu[i] = mu
                 self.Sigma[i] = Sigma
 
-        # clean up threads
-#         if self.parallel:
-#             for i in xrange(self.num_cores):
-#                 self.work_queue[i].put(None)
+        # clean up workers
         if self.gpu:
             kill_GPUWorkers(self.gpu_workers)
 
@@ -314,9 +288,8 @@ class DPNormalMixture(object):
             return get_labelsGPU(self.gpu_workers, weights, mu, Sigma, relabel=ident)
         else:
             densities = mvn_weighted_logged(self.data, mu, Sigma, weights)
-            #self._densities = densities
             if ident:
-                Z = np.asarray(densities.argmax(1),dtype='i')
+                Z = np.asarray(densities.argmax(1), dtype='i')
             else:
                 Z = None
             return sample_discrete(densities).squeeze(), Z
@@ -350,20 +323,20 @@ class DPNormalMixture(object):
                 all_labels[self.cumobs[i]:self.cumobs[i+1]] = labs.copy()
                 i += 1
             if len(mu.shape) == 1:
-                import pdb; pdb.set_trace()
+                import pdb
+                pdb.set_trace()
 
-            ct = sampler.sample_mu_Sigma(mu, Sigma, all_labels, data,
-                                         self.gamma[0], self.mu_prior_mean,
-                                         self._nu0, self._Phi0[0], self.parallel,
-                                         self.cumobs[1:])
+            ct = sampler.sample_mu_Sigma(
+                mu, Sigma, all_labels, data,
+                self.gamma[0], self.mu_prior_mean,
+                self._nu0, self._Phi0[0], self.parallel,
+                self.cumobs[1:]
+            )
             
         else:
-            ct = sampler.sample_mu_Sigma(mu, Sigma, np.asarray(labels, dtype=np.int), data,
-                                         self.gamma[0], self.mu_prior_mean,
-                                         self._nu0, self._Phi0[0], self.parallel)
-            #print "my time " + str(time.time() - t2)
+            ct = sampler.sample_mu_Sigma(
+                mu, Sigma, np.asarray(labels, dtype=np.int), data,
+                self.gamma[0], self.mu_prior_mean,
+                self._nu0, self._Phi0[0], self.parallel
+            )
         return ct
-
-
-
-

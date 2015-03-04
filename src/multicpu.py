@@ -36,7 +36,10 @@ class CPUWorker(multiprocessing.Process):
                 break  # poison pill
 
             if isinstance(new_work, CompUpdate):
-                new_work(self.data, self.gamma, self.mu_prior_mean, self.Phi0, self.nu0)
+                new_work(
+                    self.data, self.gamma, self.mu_prior_mean,
+                    self.Phi0, self.nu0
+                )
             else:
                 new_work(self.data, self.gamma, self.mu_prior_mean, 
                          self.Phi0, self.nu0, self.dens)                
@@ -69,9 +72,15 @@ class CompUpdate(object):
 
     def __call__(self, data, gamma, mu_prior_mean, Phi0, nu0):
         self.new_Sigma = np.zeros_like(self.Sigma)
-        self.new_mu = np.zeros((self.Sigma.shape[0], self.Sigma.shape[1]), dtype=np.float)
+        self.new_mu = np.zeros(
+            (self.Sigma.shape[0], self.Sigma.shape[1]),
+            dtype=np.float
+        )
         if isinstance(self.labels, list):
-            self.count = np.zeros((len(self.labels), len(self.comps)), dtype=np.int)
+            self.count = np.zeros(
+                (len(self.labels), len(self.comps)),
+                dtype=np.int
+            )
         else:
             self.count = np.zeros(len(self.comps), dtype=np.int)
         jj = -1
