@@ -31,8 +31,7 @@ comm = MPI.Comm.Get_parent()
 # 30s -- host name stuff
 
 _init = False
-_logmnflt = np.log(1e-37)
-iexp = ElementwiseKernel("float *z", "z[i] = (z[i] < -40.0) ? 0.0 : expf(z[i]);", "inplexp")
+
 # Code needs to be moved out of tasks ... pretty sure ...
 while True:
     # get task ... manual wait to decrease CPU impact 2% load
