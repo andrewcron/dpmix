@@ -52,9 +52,10 @@ while True:
         comm.Send([host_name_len, MPI.INT], dest=0, tag=30)
         comm.Send([host_name, MPI.CHAR], dest=0, tag=31)
 
-        params = np.empty(3, dtype='i')
+        params = np.empty(4, dtype='i')
         comm.Recv([params, MPI.INT], source=0, tag=12)
-        dim0, dim1, n_dev_num = params
+        dim0, dim1, n_dev_num, seed = params
+        np.random.seed(seed)
 
         # no re-init for 2nd data set
         if _init is False:
@@ -91,7 +92,7 @@ while True:
         for it in range(subtasknum):
             # params
             params = np.empty(4, dtype='i')
-            comm.Recv([params, MPI.INT], source=0, tag=13)            
+            comm.Recv([params, MPI.INT], source=0, tag=13)
             dataind, ncomp, ttype, gid = params
             nobs, ndim = alldata[dataind].shape
             a_params.append(params)
@@ -118,7 +119,7 @@ while True:
             w = a_w[it]
             mu = a_mu[it]
             Sigma = a_Sigma[it]
-            
+
             if ttype > 0:  # 1 -- just densities ... 2 -- relabel too
                 # do GPU work ...
 
