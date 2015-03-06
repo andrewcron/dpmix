@@ -114,15 +114,19 @@ def stick_break_proc(beta_a, beta_b, size=None):
     dist = stats.beta(beta_a, beta_b)
     V = stick_weights = dist.rvs(size)
 
-    #check for bad values and deal with adhoc
-    V[V < 1e-10] = 1e-10
-    V[V > (1-1e-10)] = 1-1e-10
+    # The rvs call above eventually calls NumPy's random.beta
+    # which can return nan for very small values, see issue:
+    #     https://github.com/scipy/scipy/issues/3354
     nanmask = np.isnan(V)
 
     if np.sum(nanmask) > 0:
         value = beta_a / (beta_a + beta_b)
         V[nanmask] = value[nanmask]
 
+    # and for very,very small values make them less small
+    V[V < 1e-10] = 1e-10
+    # likewise, don't get too close to one
+    V[V > (1-1e-10)] = 1-1e-10
 
     pi = mixture_weights = np.empty(len(V) + 1)
 
