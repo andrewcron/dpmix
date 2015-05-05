@@ -45,5 +45,5 @@ setup(name='dpmix',
                                libraries=['armadillo'],
                                language='c++',
                                extra_compile_args=['-fopenmp'],
-                               extra_link_args=['-fopenmp'])],
+                               extra_link_args=['-fopenmp', '-lgomp'])],
       )

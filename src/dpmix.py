@@ -77,7 +77,7 @@ class DPNormalMixture(object):
     def __init__(self, data, ncomp=256, gamma0=10, m0=None,
                  nu0=None, Phi0=None, e0=10, f0=1,
                  mu0=None, Sigma0=None, weights0=None, alpha0=1,
-                 gpu=None, parallel=True, verbose=False):
+                 gpu=None, parallel=True, verbose=False, callback=None):
         if issubclass(type(data), DPNormalMixture):
             self.data = data.data
             self.nobs, self.ndim = self.data.shape
@@ -150,6 +150,7 @@ class DPNormalMixture(object):
                         
         #verbosity
         self.verbose = verbose
+        self.callback = callback
         
         self._set_initial_values(alpha0, nu0, Phi0, mu0, Sigma0,
                                  weights0, e0, f0)
@@ -256,6 +257,10 @@ class DPNormalMixture(object):
                     not isinstance(self.verbose, bool):
                 if i % self.verbose == 0:
                     print i
+            if hasattr(self.callback,'__call__'):
+                self.callback(i)
+
+                
 
             labels, zhat = self._update_labels(mu, Sigma, weights, ident)
             counts = self._update_mu_Sigma(mu, Sigma, labels)
