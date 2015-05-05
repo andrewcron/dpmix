@@ -11,8 +11,6 @@ from numpy import get_include
 from cyarma import include_dir as arma_dir
 from cyrand import include_dir as rng_dir
 
-
-
 setup(name='dpmix',
       version='0.3',
       packages=['dpmix'],
@@ -28,7 +26,8 @@ setup(name='dpmix',
                 'matplotlib (>=1.0)',
                 'cython (>=0.17)',
                 'cyarma (>=0.2)',
-                'cyrand (>=0.2)'],
+                'cyrand (>=0.2)',
+                'mpi4py'],
       package_data={'dpmix': ['cufiles/*.cu']},
       cmdclass = {'build_ext': build_ext},
       ext_modules = [Extension("dpmix.munkres", 

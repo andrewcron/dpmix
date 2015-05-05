@@ -3,7 +3,8 @@ import numpy as np
 import numpy.random as npr
 from wishart import invwishartrand_prec
 
-######### Multi CPU for comp updates ##############
+
+# Multi CPU for comp updates
 class CPUWorker(multiprocessing.Process):
     """
     CPU multiprocess class that only loads data once
@@ -32,14 +33,18 @@ class CPUWorker(multiprocessing.Process):
         while True:
             new_work = self.task_queue.get()
             if new_work is None:
-                break # poison pill
+                break  # poison pill
 
             if isinstance(new_work, CompUpdate):
-                new_work(self.data, self.gamma, self.mu_prior_mean, self.Phi0, self.nu0)
+                new_work(
+                    self.data, self.gamma, self.mu_prior_mean,
+                    self.Phi0, self.nu0
+                )
             else:
                 new_work(self.data, self.gamma, self.mu_prior_mean, 
                          self.Phi0, self.nu0, self.dens)                
             self.result_queue.put(new_work)
+
 
 class BEMSigmaUpdate(object):
     def __init__(self, ct, xbar, Sigma, comp):
@@ -50,16 +55,14 @@ class BEMSigmaUpdate(object):
 
     def __call__(self, data, gamma, mu_prior_mean, Phi0, nu0, dens):
         j = self.comp
-        if self.ct[j]>0.1:
-            Xj_d = (data - self.xbar[j,:]/self.ct[j])
-            SS = np.dot(Xj_d.T * dens[:,j].flatten(), Xj_d)
+        if self.ct[j] > 0.1:
+            Xj_d = (data - self.xbar[j, :]/self.ct[j])
+            SS = np.dot(Xj_d.T * dens[:, j].flatten(), Xj_d)
             SS += Phi0[j] + (self.ct[j]/(1+gamma[j]*self.ct[j]))*np.outer(
-                (1/self.ct[j])*self.xbar[j,:] - mu_prior_mean,
-                (1/self.ct[j])*self.xbar[j,:] - mu_prior_mean)
+                (1/self.ct[j])*self.xbar[j, :] - mu_prior_mean,
+                (1/self.ct[j])*self.xbar[j, :] - mu_prior_mean)
             self.Sigma = SS / self.ct[j]
 
-
-    
 
 class CompUpdate(object):
     def __init__(self, comps, labels, Sigma):
@@ -69,9 +72,15 @@ class CompUpdate(object):
 
     def __call__(self, data, gamma, mu_prior_mean, Phi0, nu0):
         self.new_Sigma = np.zeros_like(self.Sigma)
-        self.new_mu = np.zeros((self.Sigma.shape[0], self.Sigma.shape[1]), dtype=np.float)
+        self.new_mu = np.zeros(
+            (self.Sigma.shape[0], self.Sigma.shape[1]),
+            dtype=np.float
+        )
         if isinstance(self.labels, list):
-            self.count = np.zeros((len(self.labels), len(self.comps)), dtype=np.int)
+            self.count = np.zeros(
+                (len(self.labels), len(self.comps)),
+                dtype=np.int
+            )
         else:
             self.count = np.zeros(len(self.comps), dtype=np.int)
         jj = -1
@@ -81,12 +90,14 @@ class CompUpdate(object):
             if isinstance(self.labels, list):
                 nobs = data.shape[0]
                 mask = np.zeros(nobs, dtype=np.bool)
-                cumobs = 0; ii = 0
+                cumobs = 0
+                ii = 0
                 for labs in self.labels:
                     submask = labs == j
                     mask[cumobs:(cumobs+len(labs))] = submask
-                    self.count[ii, jj] = np.sum(submask); 
-                    cumobs+=len(labs); ii+=1
+                    self.count[ii, jj] = np.sum(submask)
+                    cumobs += len(labs)
+                    ii += 1
             else:
                 mask = self.labels == j
                 self.count[jj] = np.sum(mask)
@@ -125,6 +136,3 @@ class CompUpdate(object):
 
         del self.labels
         del self.Sigma
-
-
-

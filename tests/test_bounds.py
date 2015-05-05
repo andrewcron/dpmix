@@ -6,7 +6,7 @@ if __name__ == '__main__':
     nclust = 256
     niter = 10
     burnin = 10
-    device = 2
+    device = 1
     max_events = 50000
     num_files = 10
 

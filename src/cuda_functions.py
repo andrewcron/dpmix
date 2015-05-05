@@ -8,14 +8,15 @@ from gpustats.util import DeviceInfo
 
 devinfo = DeviceInfo()
 
+
 def gpu_sweep_col_diff(X, y):
     """ X - y = X across the columns """
-    if type(X)==GPUArray:
+    if type(X) == GPUArray:
         gX = X
     else:
         gX = to_gpu(np.asarray(X, dtype=np.float32))
 
-    if type(y)==GPUArray:
+    if type(y) == GPUArray:
         gy = y
     else:
         gy = to_gpu(np.asarray(y, dtype=np.float32))
@@ -34,21 +35,21 @@ def gpu_sweep_col_diff(X, y):
     else:
         func = CUDA_Kernels.get_function("sweep_columns_diff_cm")
 
-    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
-         grid = (gridsize,1), shared = shared)
+    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize, 1),
+         grid = (gridsize, 1), shared = shared)
 
-    if type(y)!=GPUArray:
+    if type(y) != GPUArray:
         X = gX.get()
 
 
 def gpu_sweep_col_div(X, y):
     """ X / y = X across the columns """
-    if type(X)==GPUArray:
+    if type(X) == GPUArray:
         gX = X
     else:
         gX = to_gpu(np.asarray(X, dtype=np.float32))
 
-    if type(y)==GPUArray:
+    if type(y) == GPUArray:
         gy = y
     else:
         gy = to_gpu(np.asarray(y, dtype=np.float32))
@@ -67,20 +68,21 @@ def gpu_sweep_col_div(X, y):
     else:
         func = CUDA_Kernels.get_function("sweep_columns_div_cm")
 
-    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
-         grid = (gridsize,1), shared = shared)
+    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize, 1),
+         grid = (gridsize, 1), shared = shared)
 
-    if type(y)!=GPUArray:
+    if type(y) != GPUArray:
         X = gX.get()
+
 
 def gpu_sweep_col_mult(X, y):
     """ X * y = X across the columns """
-    if type(X)==GPUArray:
+    if type(X) == GPUArray:
         gX = X
     else:
         gX = to_gpu(np.asarray(X, dtype=np.float32))
 
-    if type(y)==GPUArray:
+    if type(y) == GPUArray:
         gy = y
     else:
         gy = to_gpu(np.asarray(y, dtype=np.float32))
@@ -99,22 +101,21 @@ def gpu_sweep_col_mult(X, y):
     else:
         func = CUDA_Kernels.get_function("sweep_columns_mult_cm")
 
-    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
-         grid = (gridsize,1), shared = shared)
+    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize, 1),
+         grid = (gridsize, 1), shared = shared)
 
-    if type(y)!=GPUArray:
+    if type(y) != GPUArray:
         X = gX.get()
-
 
 
 def gpu_sweep_row_diff(X, y):
     """ X - y = X down the rows """
-    if type(X)==GPUArray:
+    if type(X) == GPUArray:
         gX = X
     else:
         gX = to_gpu(np.asarray(X, dtype=np.float32))
 
-    if type(y)==GPUArray:
+    if type(y) == GPUArray:
         gy = y
     else:
         gy = to_gpu(np.asarray(y, dtype=np.float32))
@@ -132,20 +133,21 @@ def gpu_sweep_row_diff(X, y):
         func = CUDA_Kernels.get_function("sweep_rows_diff")
     else:
         func = CUDA_Kernels.get_function("sweep_rows_diff_cm")
-    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
-         grid = (gridsize,1), shared = shared)
+    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize, 1),
+         grid = (gridsize, 1), shared = shared)
 
-    if type(y)!=GPUArray:
+    if type(y) != GPUArray:
         X = gX.get()
+
 
 def gpu_sweep_row_div(X, y):
     """ X / y = X down the rows """
-    if type(X)==GPUArray:
+    if type(X) == GPUArray:
         gX = X
     else:
         gX = to_gpu(np.asarray(X, dtype=np.float32))
 
-    if type(y)==GPUArray:
+    if type(y) == GPUArray:
         gy = y
     else:
         gy = to_gpu(np.asarray(y, dtype=np.float32))
@@ -164,21 +166,21 @@ def gpu_sweep_row_div(X, y):
     else:
         func = CUDA_Kernels.get_functions("sweep_rows_div_cm")
 
-    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
-         grid = (gridsize,1), shared = shared)
+    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize, 1),
+         grid = (gridsize, 1), shared = shared)
 
-    if type(y)!=GPUArray:
+    if type(y) != GPUArray:
         X = gX.get()
 
 
 def gpu_sweep_row_mult(X, y):
     """ X * y = X down the rows """
-    if type(X)==GPUArray:
+    if type(X) == GPUArray:
         gX = X
     else:
         gX = to_gpu(np.asarray(X, dtype=np.float32))
 
-    if type(y)==GPUArray:
+    if type(y) == GPUArray:
         gy = y
     else:
         gy = to_gpu(np.asarray(y, dtype=np.float32))
@@ -197,12 +199,11 @@ def gpu_sweep_row_mult(X, y):
     else:
         func = CUDA_Kernels.get_functions("sweep_rows_mult_cm")
 
-    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize,1),
-         grid = (gridsize,1), shared = shared)
+    func(gX, gy, dims[0], dims[1], block=(blocksize, blocksize, 1),
+         grid = (gridsize, 1), shared = shared)
 
-    if type(y)!=GPUArray:
+    if type(y) != GPUArray:
         X = gX.get()
-
 
 
 def gpu_apply_row_max(X):
@@ -211,7 +212,7 @@ def gpu_apply_row_max(X):
 
     returns the gpuarray, y
     """
-    if type(X)==GPUArray:
+    if type(X) == GPUArray:
         gX = X
     else:
         gX = to_gpu(np.asarray(X, dtype=np.float32))
@@ -230,19 +231,12 @@ def gpu_apply_row_max(X):
 
     if gX.flags.c_contiguous:
         func = CUDA_Kernels.get_function("apply_rows_max")
-        shared = 4*blocksize*(blocksize+2) # pad for bank conflicts
+        shared = 4*blocksize*(blocksize+2)  # pad for bank conflicts
     else:
         func = CUDA_Kernels.get_function("apply_rows_max_cm")
         shared = 4*blocksize*(blocksize+1)
 
-    func(gX, gy, giy, dims[0], dims[1], block=(blocksize, blocksize,1),
-         grid = (gridsize,1), shared = shared)
+    func(gX, gy, giy, dims[0], dims[1], block=(blocksize, blocksize, 1),
+         grid = (gridsize, 1), shared = shared)
 
     return gy, giy
-
-
-
-
-    
-
-        
