@@ -189,7 +189,15 @@ class HDPNormalMixture(DPNormalMixture):
         for i in xrange(self.ngroups):
             self.alldata[self.cumobs[i]:self.cumobs[i+1], :] = self.data[i].copy()
 
-    def sample(self, niter=1000, nburn=100, thin=1, tune_interval=100, ident=False):
+    def sample(
+            self,
+            niter=1000,
+            nburn=100,
+            thin=1,
+            tune_interval=100,
+            ident=False,
+            callback=None
+    ):
         """
         Performs MCMC sampling of the posterior. \beta must be sampled
         using Metropolis Hastings and its proposal distribution will
@@ -224,6 +232,10 @@ class HDPNormalMixture(DPNormalMixture):
                     not isinstance(self.verbose, bool):
                 if i % self.verbose == 0:
                     print i
+
+            if hasattr(callback, '__call__'):
+                callback(i)
+
             # update labels
             labels, zhat = self._update_labels(mu, Sigma, weights)
 
