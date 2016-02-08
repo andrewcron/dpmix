@@ -56,9 +56,20 @@ def init_GPUWorkers(data, devslist):
             cdev = hostdevs[0]
             hostdevs = np.delete(hostdevs, 0)
             devs_toinit[host_name.tostring()] = hostdevs
-            
+
+            # for task 0, initialize workers with their own random seed
+            # this allows for reproducible runs if the calling application
+            # sets its own random seed
+            random_seed = np.random.randint(2**31)
+
+            # the task 0 params send the data shape, device #, & seed
             params = np.array(
-                [todat.shape[0], todat.shape[1], int(cdev)],
+                [
+                    todat.shape[0],
+                    todat.shape[1],
+                    int(cdev),
+                    random_seed
+                ],
                 dtype='i'
             )
             workers.Send([params, MPI.INT], dest=i, tag=12)
