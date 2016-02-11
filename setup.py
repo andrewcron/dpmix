@@ -13,7 +13,7 @@ from cyrand import include_dir as rng_dir
 
 setup(
     name='dpmix',
-    version='0.3',
+    version='0.4',
     packages=['dpmix'],
     package_dir={'dpmix': 'src'},
     description='Optimized (and GPU enhanced) fitting of Gaussian Mixture Models',
@@ -23,11 +23,11 @@ setup(
     author_email='andrew.cron@duke.edu',
     url='https://github.com/andrewcron/pycdp',
     requires=[
-        'numpy (>=1.3.0)',
+        'numpy (>=1.6)',
         'scipy (>=0.6)',
         'matplotlib (>=1.0)',
         'cython (>=0.17)',
-        'cyarma (>=0.2)',
+        'cyarma (==0.2)',
         'cyrand (>=0.2)',
         'mpi4py'
     ],
