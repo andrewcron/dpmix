@@ -203,6 +203,11 @@ class DPNormalMixture(object):
         with great care. We recommend using the EM algorithm. Also
         .. burning doesn't make much sense in this case.
         """
+        if self.verbose:
+            if self.gpu:
+                print "starting GPU enabled MCMC"
+            else:
+                print "starting MCMC"
 
         self._setup_storage(niter)
 
@@ -215,20 +220,7 @@ class DPNormalMixture(object):
         mu = self._mu0
         Sigma = self._Sigma0
 
-        if self.verbose:
-            if self.gpu:
-                print "starting GPU enabled MCMC"
-            else:
-                print "starting MCMC"
-
         for i in range(-nburn, niter):
-
-            if i == 0 and ident:
-                labels, zref = self._update_labels(mu, Sigma, weights, True)
-                c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
-                for j in xrange(self.ncomp):
-                    c0[j, :] = np.sum(zref == j)
-
             if isinstance(self.verbose, int) and self.verbose and \
                     not isinstance(self.verbose, bool):
                 if i % self.verbose == 0:
@@ -237,9 +229,20 @@ class DPNormalMixture(object):
             if hasattr(callback, '__call__'):
                 callback(i)
 
+            # update labels
             labels, zhat = self._update_labels(mu, Sigma, weights, ident)
+
+            # get initial reference if needed
+            if i == 0 and ident:
+                zref = zhat.copy()
+                c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
+                for j in xrange(self.ncomp):
+                    c0[j, :] = np.sum(zref == j)
+
+            # update mu and sigma
             counts = self._update_mu_Sigma(mu, Sigma, labels)
 
+            # update weights
             stick_weights, weights = self._update_stick_weights(counts, alpha)
 
             alpha = self._update_alpha(stick_weights)
