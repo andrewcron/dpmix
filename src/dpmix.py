@@ -235,9 +235,9 @@ class DPNormalMixture(object):
             # get initial reference if needed
             if i == 0 and ident:
                 zref = zhat.copy()
-                c0 = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
+                cost = np.zeros((self.ncomp, self.ncomp), dtype=np.double)
                 for j in xrange(self.ncomp):
-                    c0[j, :] = np.sum(zref == j)
+                    cost[j, :] = np.sum(zref == j)
 
             # update mu and sigma
             counts = self._update_mu_Sigma(mu, Sigma, labels)
@@ -249,7 +249,7 @@ class DPNormalMixture(object):
 
             # relabel if needed:
             if i > 0 and ident:
-                cost = c0.copy()
+                #cost = c0.copy()
                 try:
                     _get_cost(zref, zhat, cost)  # cython!!
                 except IndexError:
@@ -261,6 +261,8 @@ class DPNormalMixture(object):
                 weights = weights[iii]
                 mu = mu[iii]
                 Sigma = Sigma[iii]
+
+                zref = zhat.copy()
             if i >= 0:
                 self.weights[i] = weights
                 self.alpha[i] = alpha
